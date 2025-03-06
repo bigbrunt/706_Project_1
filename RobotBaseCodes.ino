@@ -62,42 +62,41 @@ int speed_change;
 HardwareSerial *SerialCom;
 
 int pos = 0;
-void setup(void)
-{
-  turret_motor.attach(11);
-  pinMode(LED_BUILTIN, OUTPUT);
+// void setup(void)
+// {
+//   turret_motor.attach(11);
+//   pinMode(LED_BUILTIN, OUTPUT);
 
-  // The Trigger pin will tell the sensor to range find
-  pinMode(TRIG_PIN, OUTPUT);
-  digitalWrite(TRIG_PIN, LOW);
+//   // The Trigger pin will tell the sensor to range find
+//   pinMode(TRIG_PIN, OUTPUT);
+//   digitalWrite(TRIG_PIN, LOW);
 
-  // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
-  SerialCom = &Serial;
-  SerialCom->begin(115200);
-  SerialCom->println("MECHENG706_Base_Code_25/01/2018");
-  delay(1000);
-  SerialCom->println("Setup....");
+//   // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
+//   SerialCom = &Serial;
+//   SerialCom->begin(115200);
+//   SerialCom->println("MECHENG706_Base_Code_25/01/2018");
+//   delay(1000);
+//   SerialCom->println("Setup....");
 
-  delay(1000); //settling time but no really needed
+//   delay(1000); //settling time but no really needed
+// }
 
-}
-
-void loop(void) //main loop
-{
-  static STATE machine_state = INITIALISING;
-  //Finite-state machine Code
-  switch (machine_state) {
-    case INITIALISING:
-      machine_state = initialising();
-      break;
-    case RUNNING: //Lipo Battery Volage OK
-      machine_state =  running();
-      break;
-    case STOPPED: //Stop of Lipo Battery voltage is too low, to protect Battery
-      machine_state =  stopped();
-      break;
-  };
-}
+// void loop(void) //main loop
+// {
+//   static STATE machine_state = INITIALISING;
+//   //Finite-state machine Code
+//   switch (machine_state) {
+//     case INITIALISING:
+//       machine_state = initialising();
+//       break;
+//     case RUNNING: //Lipo Battery Volage OK
+//       machine_state =  running();
+//       break;
+//     case STOPPED: //Stop of Lipo Battery voltage is too low, to protect Battery
+//       machine_state =  stopped();
+//       break;
+//   };
+// }
 
 
 STATE initialising() {
