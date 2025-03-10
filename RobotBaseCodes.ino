@@ -19,7 +19,33 @@
   Modified: 15/02/2018
   Author: Logan Stuart
 */
+
+
 #include <Servo.h>  //Need for Servo pulse output
+
+#include <SoftwareSerial.h>
+
+#define INTERNAL_LED 13
+
+// Serial Data input pin
+#define BLUETOOTH_RX 10
+// Serial Data output pin
+#define BLUETOOTH_TX 11
+
+#define STARTUP_DELAY 10  // Seconds
+#define LOOP_DELAY 10     // miliseconds
+#define SAMPLE_DELAY 10   // miliseconds
+
+// USB Serial Port
+#define OUTPUTMONITOR 0
+#define OUTPUTPLOTTER 0
+
+// Bluetooth Serial Port
+#define OUTPUTBLUETOOTHMONITOR 1
+
+
+
+SoftwareSerial BluetoothSerial(BLUETOOTH_RX, BLUETOOTH_TX);
 
 //#define NO_READ_GYRO  //Uncomment of GYRO is not attached.
 //#define NO_HC-SR04 //Uncomment of HC-SR04 ultrasonic ranging sensor is not attached.
@@ -31,7 +57,7 @@ enum STATE {
   RUNNING,
   STOPPED
 };
-
+volatile int32_t Counter = 1;
 //Refer to Shield Pinouts.jpg for pin locations
 
 //Default motor control pins
@@ -62,41 +88,60 @@ int speed_change;
 HardwareSerial *SerialCom;
 
 int pos = 0;
-// void setup(void)
-// {
-//   turret_motor.attach(11);
-//   pinMode(LED_BUILTIN, OUTPUT);
+void setup(void)
+{
+  // wireless 
+  pinMode(INTERNAL_LED, OUTPUT);
+  Serial.begin(115200);
+  BluetoothSerial.begin(115200);
+  Serial.print("Ready, waiting for ");
+  Serial.print(STARTUP_DELAY, DEC);
+  Serial.println(" seconds");
+  delaySeconds(STARTUP_DELAY);
+  // wireless
+  turret_motor.attach(11);
+  pinMode(LED_BUILTIN, OUTPUT);
 
-//   // The Trigger pin will tell the sensor to range find
-//   pinMode(TRIG_PIN, OUTPUT);
-//   digitalWrite(TRIG_PIN, LOW);
+  // The Trigger pin will tell the sensor to range find
+  pinMode(TRIG_PIN, OUTPUT);
+  digitalWrite(TRIG_PIN, LOW);
 
-//   // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
-//   SerialCom = &Serial;
-//   SerialCom->begin(115200);
-//   SerialCom->println("MECHENG706_Base_Code_25/01/2018");
-//   delay(1000);
-//   SerialCom->println("Setup....");
+  // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
+  SerialCom = &Serial;
+  SerialCom->begin(115200);
+  SerialCom->println("MECHENG706_Base_Code_25/01/2018");
+  delay(1000);
+  SerialCom->println("Setup....");
 
-//   delay(1000); //settling time but no really needed
-// }
+  delay(1000); //settling time but no really needed
+}
 
-// void loop(void) //main loop
-// {
-//   static STATE machine_state = INITIALISING;
-//   //Finite-state machine Code
-//   switch (machine_state) {
-//     case INITIALISING:
-//       machine_state = initialising();
-//       break;
-//     case RUNNING: //Lipo Battery Volage OK
-//       machine_state =  running();
-//       break;
-//     case STOPPED: //Stop of Lipo Battery voltage is too low, to protect Battery
-//       machine_state =  stopped();
-//       break;
-//   };
-// }
+void loop(void) //main loop
+{
+  static STATE machine_state = INITIALISING;
+  // Finite-state machine Code
+  switch (machine_state) {
+    case INITIALISING:
+      machine_state = initialising();
+      break;
+    case RUNNING: //Lipo Battery Volage OK
+      machine_state =  running();
+      break;
+    case STOPPED: //Stop of Lipo Battery voltage is too low, to protect Battery
+      machine_state =  stopped();
+      break;
+  };
+  // wireless
+  // flashLED(INTERNAL_LED, 1);
+  // delaySeconds(1);
+  delay(LOOP_DELAY);
+  delay(SAMPLE_DELAY);
+  delay(500);
+  int posADC = analogRead(A4);
+  int distancec = 46161 * pow(posADC, -1.302);  // calculate the distance using the calibrated graph
+  serialOutput(1, 1, analogRead(A4));
+  
+}
 
 
 STATE initialising() {
@@ -478,4 +523,58 @@ void strafe_right ()
   left_rear_motor.writeMicroseconds(1500 - speed_val);
   right_rear_motor.writeMicroseconds(1500 - speed_val);
   right_font_motor.writeMicroseconds(1500 + speed_val);
+}
+
+//wireless
+void delaySeconds(int TimedDelaySeconds) {
+  for (int i = 0; i < TimedDelaySeconds; i++) {
+    delay(1000);
+  }
+}
+
+void flashLED(int LedNumber, int TimedDelay) {
+  digitalWrite(LedNumber, HIGH);
+  delaySeconds(TimedDelay);
+  digitalWrite(LedNumber, LOW);
+  delaySeconds(TimedDelay);
+}
+
+void serialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
+  String Delimiter = ", ";
+  Serial.print(Value1, DEC);
+  Serial.print(Delimiter);
+  Serial.print(Value2, DEC);
+  Serial.print(Delimiter);
+  Serial.println(Value3, DEC);
+}
+
+void serialOutputPlotter(int32_t Value1, int32_t Value2, int32_t Value3) {
+  String Delimiter = ", ";
+  Serial.print(Value1, DEC);
+  Serial.print(Delimiter);
+  Serial.print(Value2, DEC);
+  Serial.print(Delimiter);
+  Serial.println(Value3, DEC);
+}
+
+void bluetoothSerialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
+  String Delimiter = ", ";
+  BluetoothSerial.print(Value1, DEC);
+  BluetoothSerial.print(Delimiter);
+  BluetoothSerial.print(Value2, DEC);
+  BluetoothSerial.print(Delimiter);
+  BluetoothSerial.println(Value3, DEC);
+}
+
+void serialOutput(int32_t Value1, int32_t Value2, int32_t Value3) {
+  if (OUTPUTMONITOR) {
+    serialOutputMonitor(Value1, Value2, Value3);
+  }
+  if (OUTPUTPLOTTER) {
+    serialOutputPlotter(Value1, Value2, Value3);
+  }
+  if (OUTPUTBLUETOOTHMONITOR) {
+    bluetoothSerialOutputMonitor(Value1, Value2, Value3);
+    ;
+  }
 }
