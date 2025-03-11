@@ -20,6 +20,19 @@
   Author: Logan Stuart
 */
 #include <Servo.h>  //Need for Servo pulse output
+#include <SoftwareSerial.h> // For wireless communication
+
+// Serial Data input pin
+#define BLUETOOTH_RX 10
+// Serial Data output pin
+#define BLUETOOTH_TX 11
+
+// USB Serial Port
+#define OUTPUTMONITOR 0
+#define OUTPUTPLOTTER 0
+
+// Bluetooth Serial Port
+#define OUTPUTBLUETOOTHMONITOR 1
 
 //#define NO_READ_GYRO  //Uncomment of GYRO is not attached.
 //#define NO_HC-SR04 //Uncomment of HC-SR04 ultrasonic ranging sensor is not attached.
@@ -65,6 +78,8 @@ int pos = 0;
 
 volatile int32_t Counter = 1; // Used to delay serial outputs
 
+SoftwareSerial BluetoothSerial(BLUETOOTH_RX, BLUETOOTH_TX);
+
 void setup(void) {
   turret_motor.attach(11);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -79,6 +94,8 @@ void setup(void) {
   SerialCom->println("MECHENG706_Base_Code_25/01/2018");
   delay(1000);
   SerialCom->println("Setup....");
+
+  BluetoothSerial.begin(115200);
 
   delay(1000);  //settling time but no really needed
 }
@@ -99,9 +116,11 @@ void loop(void)  //main loop
       break;
   };
   Counter = Counter + 1;
-  if (Counter > 10000) {
-    GYRO_reading(); // Serial output gyro reading, not wireless at this stage
-    PIN_reading(A4); // Serial output IR sensor reading
+  if (Counter > 100000) {
+    //GYRO_reading(); // Serial output gyro reading, not wireless at this stage
+    //PIN_reading(A4); // Serial output IR sensor reading
+    
+    serialOutput(0, PIN_get_reading(A3), PIN_get_reading(A4)); // Using counter as data index gives weird output
     Counter = 0;
   }
 }
@@ -469,4 +488,49 @@ void PIN_reading(int pin) {
   Serial.print(pin);
   Serial.print(": ");
   Serial.println(analogRead(pin));
+}
+
+int PIN_get_reading(int pin) {
+  return analogRead(pin);
+}
+
+// From wireless module
+void serialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
+  String Delimiter = ", ";
+  Serial.print(Value1, DEC);
+  Serial.print(Delimiter);
+  Serial.print(Value2, DEC);
+  Serial.print(Delimiter);
+  Serial.println(Value3, DEC);
+}
+
+void serialOutputPlotter(int32_t Value1, int32_t Value2, int32_t Value3) {
+  String Delimiter = ", ";
+  Serial.print(Value1, DEC);
+  Serial.print(Delimiter);
+  Serial.print(Value2, DEC);
+  Serial.print(Delimiter);
+  Serial.println(Value3, DEC);
+}
+
+void bluetoothSerialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
+  String Delimiter = ", ";
+  BluetoothSerial.print(Value1, DEC);
+  BluetoothSerial.print(Delimiter);
+  BluetoothSerial.print(Value2, DEC);
+  BluetoothSerial.print(Delimiter);
+  BluetoothSerial.println(Value3, DEC);
+}
+
+void serialOutput(int32_t Value1, int32_t Value2, int32_t Value3) {
+  if (OUTPUTMONITOR) {
+    serialOutputMonitor(Value1, Value2, Value3);
+  }
+  if (OUTPUTPLOTTER) {
+    serialOutputPlotter(Value1, Value2, Value3);
+  }
+  if (OUTPUTBLUETOOTHMONITOR) {
+    bluetoothSerialOutputMonitor(Value1, Value2, Value3);
+    ;
+  }
 }
