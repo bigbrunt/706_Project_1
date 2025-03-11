@@ -19,33 +19,7 @@
   Modified: 15/02/2018
   Author: Logan Stuart
 */
-
-
 #include <Servo.h>  //Need for Servo pulse output
-
-#include <SoftwareSerial.h>
-
-#define INTERNAL_LED 13
-
-// Serial Data input pin
-#define BLUETOOTH_RX 10
-// Serial Data output pin
-#define BLUETOOTH_TX 11
-
-#define STARTUP_DELAY 10  // Seconds
-#define LOOP_DELAY 10     // miliseconds
-#define SAMPLE_DELAY 10   // miliseconds
-
-// USB Serial Port
-#define OUTPUTMONITOR 0
-#define OUTPUTPLOTTER 0
-
-// Bluetooth Serial Port
-#define OUTPUTBLUETOOTHMONITOR 1
-
-
-
-SoftwareSerial BluetoothSerial(BLUETOOTH_RX, BLUETOOTH_TX);
 
 //#define NO_READ_GYRO  //Uncomment of GYRO is not attached.
 //#define NO_HC-SR04 //Uncomment of HC-SR04 ultrasonic ranging sensor is not attached.
@@ -57,7 +31,7 @@ enum STATE {
   RUNNING,
   STOPPED
 };
-volatile int32_t Counter = 1;
+
 //Refer to Shield Pinouts.jpg for pin locations
 
 //Default motor control pins
@@ -74,8 +48,8 @@ const int ECHO_PIN = 49;
 // Anything over 400 cm (23200 us pulse) is "out of range". Hit:If you decrease to this the ranging sensor but the timeout is short, you may not need to read up to 4meters.
 const unsigned int MAX_DIST = 23200;
 
-Servo left_font_motor;  // create servo object to control Vex Motor Controller 29
-Servo left_rear_motor;  // create servo object to control Vex Motor Controller 29
+Servo left_font_motor;   // create servo object to control Vex Motor Controller 29
+Servo left_rear_motor;   // create servo object to control Vex Motor Controller 29
 Servo right_rear_motor;  // create servo object to control Vex Motor Controller 29
 Servo right_font_motor;  // create servo object to control Vex Motor Controller 29
 Servo turret_motor;
@@ -88,17 +62,10 @@ int speed_change;
 HardwareSerial *SerialCom;
 
 int pos = 0;
-void setup(void)
-{
-  // wireless 
-  pinMode(INTERNAL_LED, OUTPUT);
-  Serial.begin(115200);
-  BluetoothSerial.begin(115200);
-  Serial.print("Ready, waiting for ");
-  Serial.print(STARTUP_DELAY, DEC);
-  Serial.println(" seconds");
-  delaySeconds(STARTUP_DELAY);
-  // wireless
+
+volatile int32_t Counter = 1; // Used to delay serial outputs
+
+void setup(void) {
   turret_motor.attach(11);
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -113,41 +80,37 @@ void setup(void)
   delay(1000);
   SerialCom->println("Setup....");
 
-  delay(1000); //settling time but no really needed
+  delay(1000);  //settling time but no really needed
 }
 
-void loop(void) //main loop
+void loop(void)  //main loop
 {
   static STATE machine_state = INITIALISING;
-  // Finite-state machine Code
+  //Finite-state machine Code
   switch (machine_state) {
     case INITIALISING:
       machine_state = initialising();
       break;
-    case RUNNING: //Lipo Battery Volage OK
-      machine_state =  running();
+    case RUNNING:  //Lipo Battery Volage OK
+      machine_state = running();
       break;
-    case STOPPED: //Stop of Lipo Battery voltage is too low, to protect Battery
-      machine_state =  stopped();
+    case STOPPED:  //Stop of Lipo Battery voltage is too low, to protect Battery
+      machine_state = stopped();
       break;
   };
-  // wireless
-  // flashLED(INTERNAL_LED, 1);
-  // delaySeconds(1);
-  delay(LOOP_DELAY);
-  delay(SAMPLE_DELAY);
-  delay(500);
-  int posADC = analogRead(A4);
-  int distancec = 46161 * pow(posADC, -1.302);  // calculate the distance using the calibrated graph
-  serialOutput(1, 1, analogRead(A4));
-  
+  Counter = Counter + 1;
+  if (Counter > 10000) {
+    GYRO_reading(); // Serial output gyro reading, not wireless at this stage
+    PIN_reading(A4); // Serial output IR sensor reading
+    Counter = 0;
+  }
 }
 
 
 STATE initialising() {
   //initialising
   SerialCom->println("INITIALISING....");
-  delay(1000); //One second delay to see the serial string "INITIALISING...."
+  delay(1000);  //One second delay to see the serial string "INITIALISING...."
   SerialCom->println("Enabling Motors...");
   enable_motors();
   SerialCom->println("RUNNING STATE...");
@@ -172,7 +135,7 @@ STATE running() {
     GYRO_reading();
 #endif
 
-#ifndef NO_HC-SR04
+#ifndef NO_HC - SR04
     HC_SR04_range();
 #endif
 
@@ -183,12 +146,9 @@ STATE running() {
 
     turret_motor.write(pos);
 
-    if (pos == 0)
-    {
+    if (pos == 0) {
       pos = 45;
-    }
-    else
-    {
+    } else {
       pos = 0;
     }
   }
@@ -204,7 +164,7 @@ STATE stopped() {
   disable_motors();
   slow_flash_LED_builtin();
 
-  if (millis() - previous_millis > 500) { //print massage every 500ms
+  if (millis() - previous_millis > 500) {  //print massage every 500ms
     previous_millis = millis();
     SerialCom->println("STOPPED---------");
 
@@ -215,14 +175,13 @@ STATE stopped() {
       SerialCom->print("Lipo OK waiting of voltage Counter 10 < ");
       SerialCom->println(counter_lipo_voltage_ok);
       counter_lipo_voltage_ok++;
-      if (counter_lipo_voltage_ok > 10) { //Making sure lipo voltage is stable
+      if (counter_lipo_voltage_ok > 10) {  //Making sure lipo voltage is stable
         counter_lipo_voltage_ok = 0;
         enable_motors();
         SerialCom->println("Lipo OK returning to RUN STATE");
         return RUNNING;
       }
-    } else
-    {
+    } else {
       counter_lipo_voltage_ok = 0;
     }
 #endif
@@ -230,8 +189,7 @@ STATE stopped() {
   return STOPPED;
 }
 
-void fast_flash_double_LED_builtin()
-{
+void fast_flash_double_LED_builtin() {
   static byte indexer = 0;
   static unsigned long fast_flash_millis;
   if (millis() > fast_flash_millis) {
@@ -247,8 +205,7 @@ void fast_flash_double_LED_builtin()
   }
 }
 
-void slow_flash_LED_builtin()
-{
+void slow_flash_LED_builtin() {
   static unsigned long slow_flash_millis;
   if (millis() - slow_flash_millis > 2000) {
     slow_flash_millis = millis();
@@ -256,8 +213,7 @@ void slow_flash_LED_builtin()
   }
 }
 
-void speed_change_smooth()
-{
+void speed_change_smooth() {
   speed_val += speed_change;
   if (speed_val > 1000)
     speed_val = 1000;
@@ -265,8 +221,7 @@ void speed_change_smooth()
 }
 
 #ifndef NO_BATTERY_V_OK
-boolean is_battery_voltage_OK()
-{
+boolean is_battery_voltage_OK() {
   static byte Low_voltage_counter;
   static unsigned long previous_millis;
 
@@ -308,13 +263,11 @@ boolean is_battery_voltage_OK()
     else
       return true;
   }
-
 }
 #endif
 
-#ifndef NO_HC-SR04
-void HC_SR04_range()
-{
+#ifndef NO_HC - SR04
+void HC_SR04_range() {
   unsigned long t1;
   unsigned long t2;
   unsigned long pulse_width;
@@ -328,10 +281,10 @@ void HC_SR04_range()
 
   // Wait for pulse on echo pin
   t1 = micros();
-  while ( digitalRead(ECHO_PIN) == 0 ) {
+  while (digitalRead(ECHO_PIN) == 0) {
     t2 = micros();
     pulse_width = t2 - t1;
-    if ( pulse_width > (MAX_DIST + 1000)) {
+    if (pulse_width > (MAX_DIST + 1000)) {
       SerialCom->println("HC-SR04: NOT found");
       return;
     }
@@ -341,11 +294,10 @@ void HC_SR04_range()
   // Note: the micros() counter will overflow after ~70 min
 
   t1 = micros();
-  while ( digitalRead(ECHO_PIN) == 1)
-  {
+  while (digitalRead(ECHO_PIN) == 1) {
     t2 = micros();
     pulse_width = t2 - t1;
-    if ( pulse_width > (MAX_DIST + 1000) ) {
+    if (pulse_width > (MAX_DIST + 1000)) {
       SerialCom->println("HC-SR04: Out of range");
       return;
     }
@@ -361,7 +313,7 @@ void HC_SR04_range()
   inches = pulse_width / 148.0;
 
   // Print out results
-  if ( pulse_width > MAX_DIST ) {
+  if (pulse_width > MAX_DIST) {
     SerialCom->println("HC-SR04: Out of range");
   } else {
     SerialCom->print("HC-SR04:");
@@ -371,23 +323,20 @@ void HC_SR04_range()
 }
 #endif
 
-void Analog_Range_A4()
-{
+void Analog_Range_A4() {
   SerialCom->print("Analog Range A4:");
   SerialCom->println(analogRead(A4));
 }
 
 #ifndef NO_READ_GYRO
-void GYRO_reading()
-{
+void GYRO_reading() {
   SerialCom->print("GYRO A3:");
   SerialCom->println(analogRead(A3));
 }
 #endif
 
 //Serial command pasing
-void read_serial_command()
-{
+void read_serial_command() {
   if (SerialCom->available()) {
     char val = SerialCom->read();
     SerialCom->print("Speed:");
@@ -396,37 +345,37 @@ void read_serial_command()
 
     //Perform an action depending on the command
     switch (val) {
-      case 'w'://Move Forward
+      case 'w':  //Move Forward
       case 'W':
-        forward ();
+        forward();
         SerialCom->println("Forward");
         break;
-      case 's'://Move Backwards
+      case 's':  //Move Backwards
       case 'S':
-        reverse ();
+        reverse();
         SerialCom->println("Backwards");
         break;
-      case 'q'://Turn Left
+      case 'q':  //Turn Left
       case 'Q':
         strafe_left();
         SerialCom->println("Strafe Left");
         break;
-      case 'e'://Turn Right
+      case 'e':  //Turn Right
       case 'E':
         strafe_right();
         SerialCom->println("Strafe Right");
         break;
-      case 'a'://Turn Right
+      case 'a':  //Turn Right
       case 'A':
         ccw();
         SerialCom->println("ccw");
         break;
-      case 'd'://Turn Right
+      case 'd':  //Turn Right
       case 'D':
         cw();
         SerialCom->println("cw");
         break;
-      case '-'://Turn Right
+      case '-':  //Turn Right
       case '_':
         speed_change = -100;
         SerialCom->println("-100");
@@ -441,18 +390,15 @@ void read_serial_command()
         SerialCom->println("stop");
         break;
     }
-
   }
-
 }
 
 //----------------------Motor moments------------------------
 //The Vex Motor Controller 29 use Servo Control signals to determine speed and direction, with 0 degrees meaning neutral https://en.wikipedia.org/wiki/Servo_control
 
-void disable_motors()
-{
-  left_font_motor.detach();  // detach the servo on pin left_front to turn Vex Motor Controller 29 Off
-  left_rear_motor.detach();  // detach the servo on pin left_rear to turn Vex Motor Controller 29 Off
+void disable_motors() {
+  left_font_motor.detach();   // detach the servo on pin left_front to turn Vex Motor Controller 29 Off
+  left_rear_motor.detach();   // detach the servo on pin left_rear to turn Vex Motor Controller 29 Off
   right_rear_motor.detach();  // detach the servo on pin right_rear to turn Vex Motor Controller 29 Off
   right_font_motor.detach();  // detach the servo on pin right_front to turn Vex Motor Controller 29 Off
 
@@ -462,14 +408,13 @@ void disable_motors()
   pinMode(right_front, INPUT);
 }
 
-void enable_motors()
-{
-  left_font_motor.attach(left_front);  // attaches the servo on pin left_front to turn Vex Motor Controller 29 On
-  left_rear_motor.attach(left_rear);  // attaches the servo on pin left_rear to turn Vex Motor Controller 29 On
-  right_rear_motor.attach(right_rear);  // attaches the servo on pin right_rear to turn Vex Motor Controller 29 On
+void enable_motors() {
+  left_font_motor.attach(left_front);    // attaches the servo on pin left_front to turn Vex Motor Controller 29 On
+  left_rear_motor.attach(left_rear);     // attaches the servo on pin left_rear to turn Vex Motor Controller 29 On
+  right_rear_motor.attach(right_rear);   // attaches the servo on pin right_rear to turn Vex Motor Controller 29 On
   right_font_motor.attach(right_front);  // attaches the servo on pin right_front to turn Vex Motor Controller 29 On
 }
-void stop() //Stop
+void stop()  //Stop
 {
   left_font_motor.writeMicroseconds(1500);
   left_rear_motor.writeMicroseconds(1500);
@@ -477,104 +422,51 @@ void stop() //Stop
   right_font_motor.writeMicroseconds(1500);
 }
 
-void forward()
-{
+void forward() {
   left_font_motor.writeMicroseconds(1500 + speed_val);
   left_rear_motor.writeMicroseconds(1500 + speed_val);
   right_rear_motor.writeMicroseconds(1500 - speed_val);
   right_font_motor.writeMicroseconds(1500 - speed_val);
 }
 
-void reverse ()
-{
+void reverse() {
   left_font_motor.writeMicroseconds(1500 - speed_val);
   left_rear_motor.writeMicroseconds(1500 - speed_val);
   right_rear_motor.writeMicroseconds(1500 + speed_val);
   right_font_motor.writeMicroseconds(1500 + speed_val);
 }
 
-void ccw ()
-{
+void ccw() {
   left_font_motor.writeMicroseconds(1500 - speed_val);
   left_rear_motor.writeMicroseconds(1500 - speed_val);
   right_rear_motor.writeMicroseconds(1500 - speed_val);
   right_font_motor.writeMicroseconds(1500 - speed_val);
 }
 
-void cw ()
-{
+void cw() {
   left_font_motor.writeMicroseconds(1500 + speed_val);
   left_rear_motor.writeMicroseconds(1500 + speed_val);
   right_rear_motor.writeMicroseconds(1500 + speed_val);
   right_font_motor.writeMicroseconds(1500 + speed_val);
 }
 
-void strafe_left ()
-{
+void strafe_left() {
   left_font_motor.writeMicroseconds(1500 - speed_val);
   left_rear_motor.writeMicroseconds(1500 + speed_val);
   right_rear_motor.writeMicroseconds(1500 + speed_val);
   right_font_motor.writeMicroseconds(1500 - speed_val);
 }
 
-void strafe_right ()
-{
+void strafe_right() {
   left_font_motor.writeMicroseconds(1500 + speed_val);
   left_rear_motor.writeMicroseconds(1500 - speed_val);
   right_rear_motor.writeMicroseconds(1500 - speed_val);
   right_font_motor.writeMicroseconds(1500 + speed_val);
 }
 
-//wireless
-void delaySeconds(int TimedDelaySeconds) {
-  for (int i = 0; i < TimedDelaySeconds; i++) {
-    delay(1000);
-  }
-}
-
-void flashLED(int LedNumber, int TimedDelay) {
-  digitalWrite(LedNumber, HIGH);
-  delaySeconds(TimedDelay);
-  digitalWrite(LedNumber, LOW);
-  delaySeconds(TimedDelay);
-}
-
-void serialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
-  String Delimiter = ", ";
-  Serial.print(Value1, DEC);
-  Serial.print(Delimiter);
-  Serial.print(Value2, DEC);
-  Serial.print(Delimiter);
-  Serial.println(Value3, DEC);
-}
-
-void serialOutputPlotter(int32_t Value1, int32_t Value2, int32_t Value3) {
-  String Delimiter = ", ";
-  Serial.print(Value1, DEC);
-  Serial.print(Delimiter);
-  Serial.print(Value2, DEC);
-  Serial.print(Delimiter);
-  Serial.println(Value3, DEC);
-}
-
-void bluetoothSerialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
-  String Delimiter = ", ";
-  BluetoothSerial.print(Value1, DEC);
-  BluetoothSerial.print(Delimiter);
-  BluetoothSerial.print(Value2, DEC);
-  BluetoothSerial.print(Delimiter);
-  BluetoothSerial.println(Value3, DEC);
-}
-
-void serialOutput(int32_t Value1, int32_t Value2, int32_t Value3) {
-  if (OUTPUTMONITOR) {
-    serialOutputMonitor(Value1, Value2, Value3);
-  }
-  if (OUTPUTPLOTTER) {
-    serialOutputPlotter(Value1, Value2, Value3);
-  }
-  if (OUTPUTBLUETOOTHMONITOR) {
-    bluetoothSerialOutputMonitor(Value1, Value2, Value3);
-    ;
-  }
+void PIN_reading(int pin) {
+  Serial.print("PIN ");
+  Serial.print(pin);
+  Serial.print(": ");
+  Serial.println(analogRead(pin));
 }
