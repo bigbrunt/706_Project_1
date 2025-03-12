@@ -119,8 +119,10 @@ void loop(void)  //main loop
   if (Counter > 100000) {
     //GYRO_reading(); // Serial output gyro reading, not wireless at this stage
     //PIN_reading(A4); // Serial output IR sensor reading
-    
-    serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
+    int32_t cm = (int32_t) HC_SR04_range();
+    int32_t distancec = (int32_t) 11707 * pow(PIN_get_reading(A4), -0.847);
+    //serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
+    serialOutput(0, 0, distancec);
     Counter = 0;
   }
 }
@@ -286,7 +288,7 @@ boolean is_battery_voltage_OK() {
 #endif
 
 #ifndef NO_HC - SR04
-void HC_SR04_range() {
+float HC_SR04_range() {
   unsigned long t1;
   unsigned long t2;
   unsigned long pulse_width;
@@ -305,7 +307,7 @@ void HC_SR04_range() {
     pulse_width = t2 - t1;
     if (pulse_width > (MAX_DIST + 1000)) {
       SerialCom->println("HC-SR04: NOT found");
-      return;
+      return -1;
     }
   }
 
@@ -318,7 +320,7 @@ void HC_SR04_range() {
     pulse_width = t2 - t1;
     if (pulse_width > (MAX_DIST + 1000)) {
       SerialCom->println("HC-SR04: Out of range");
-      return;
+      return -1;
     }
   }
 
@@ -338,6 +340,7 @@ void HC_SR04_range() {
     SerialCom->print("HC-SR04:");
     SerialCom->print(cm);
     SerialCom->println("cm");
+    return cm;
   }
 }
 #endif
