@@ -120,7 +120,7 @@ void loop(void)  //main loop
     //GYRO_reading(); // Serial output gyro reading, not wireless at this stage
     //PIN_reading(A4); // Serial output IR sensor reading
     
-    serialOutput(0, PIN_get_reading(A3), PIN_get_reading(A4)); // Using counter as data index gives weird output
+    serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
     Counter = 0;
   }
 }
