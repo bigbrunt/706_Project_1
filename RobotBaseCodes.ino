@@ -71,7 +71,7 @@ Servo turret_motor;
 int speed_val = 100;
 int speed_change;
 
-//Serial Pointer
+//Serial Pointer for USB com
 HardwareSerial *SerialCom;
 
 int pos = 0;
@@ -116,15 +116,16 @@ void loop(void)  //main loop
       break;
   };
   Counter = Counter + 1;
-  if (Counter > 100000) {
+ // if (Counter > 100000) {
     //GYRO_reading(); // Serial output gyro reading, not wireless at this stage
     //PIN_reading(A4); // Serial output IR sensor reading
     int32_t cm = (int32_t) HC_SR04_range();
-    int32_t distancec = (int32_t) 11707 * pow(PIN_get_reading(A4), -0.847);
+    int distancec =  2712.6 * pow(analogRead(A4), -1.038);
+
     //serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
     serialOutput(0, 0, distancec);
     Counter = 0;
-  }
+  //}
 }
 
 
@@ -377,35 +378,45 @@ void read_serial_command() {
         reverse();
         SerialCom->println("Backwards");
         break;
-      case 'q':  //Turn Left
-      case 'Q':
+      case 'a':  //Strafe Left
+      case 'A':
         strafe_left();
         SerialCom->println("Strafe Left");
         break;
-      case 'e':  //Turn Right
-      case 'E':
+      case 'd':  //Strafe Right
+      case 'D':
         strafe_right();
         SerialCom->println("Strafe Right");
         break;
-      case 'a':  //Turn Right
-      case 'A':
+      case 'q':  //Turn Left
+      case 'Q':
         ccw();
         SerialCom->println("ccw");
         break;
-      case 'd':  //Turn Right
-      case 'D':
+      case 'e':  //Turn Right
+      case 'E':
         cw();
         SerialCom->println("cw");
         break;
-      case '-':  //Turn Right
+      case '-':  // - speed
       case '_':
         speed_change = -100;
         SerialCom->println("-100");
         break;
       case '=':
-      case '+':
+      case '+': // + speed
         speed_change = 100;
         SerialCom->println("+");
+        break;
+      case 'x':
+      case 'X':
+        stop();
+        SerialCom->println("stop");
+        break;
+      case 'r':
+      case 'R':
+        goToWall();
+        // bluetoothSerial.print("Go To Wall");
         break;
       default:
         stop();
@@ -415,6 +426,18 @@ void read_serial_command() {
   }
 }
 
+
+void goToWall(){
+  // int32_t power, kp,ki,kd;
+  // kp = 10;
+  // ki = 1;
+  // kd = 3;
+  
+  // power = HC_SR04_range() * kp;
+
+
+
+}
 //----------------------Motor moments------------------------
 //The Vex Motor Controller 29 use Servo Control signals to determine speed and direction, with 0 degrees meaning neutral https://en.wikipedia.org/wiki/Servo_control
 
@@ -493,9 +516,6 @@ void PIN_reading(int pin) {
   Serial.println(analogRead(pin));
 }
 
-int PIN_get_reading(int pin) {
-  return analogRead(pin);
-}
 
 // From wireless module
 void serialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
@@ -523,6 +543,10 @@ void bluetoothSerialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3
   BluetoothSerial.print(Value2, DEC);
   BluetoothSerial.print(Delimiter);
   BluetoothSerial.println(Value3, DEC);
+
+  // char out_char[100];
+  // sprintf(out_char,"%d , %d , %d\n", Value1, Value2, Value3);
+  // BluetoothSerial.print(out_char);
 }
 
 void serialOutput(int32_t Value1, int32_t Value2, int32_t Value3) {
