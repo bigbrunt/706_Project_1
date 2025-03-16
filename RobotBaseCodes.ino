@@ -226,11 +226,11 @@ void loop(void)  //main loop
 
   int rawValue = analogRead(gyroPin);
   float voltage = (float)(rawValue / 1023.0) * referenceVoltage; // Convert to voltage
-  // float angularVelocity = (voltage - (zeroRate * referenceVoltage / 1023)) / sensitivity;
+  float angularVelocity = (voltage - (zeroRate * referenceVoltage / 1023)) / sensitivity;
 
-  // angle += angularVelocity * deltaTime; // Equivalent to integrating
+  angle += angularVelocity * deltaTime; // Equivalent to integrating
 
-  serialOutput(0, 0, voltage); // Output wirelessly
+  serialOutput(0, 0, angle); // Output wirelessly
   delay(500);
   //
   
