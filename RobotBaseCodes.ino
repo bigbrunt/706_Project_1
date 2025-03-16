@@ -22,6 +22,15 @@
 #include <Servo.h>  //Need for Servo pulse output
 #include <SoftwareSerial.h> // For wireless communication
 
+// Gyro stuff
+const int gyroPin = A3;
+const float sensitivity = 0.007; // Taken from data sheets
+const float referenceVoltage = 5; // For Arduino
+const int zeroRate = 512; // Half of 1023, implies no rotation (check this is calibrated)
+float angle = 0; // Rotation from initial placement
+unsigned long lastTime = 0; 
+//
+
 
 // Serial Data input pin
 #define BLUETOOTH_RX 10
@@ -72,6 +81,7 @@ double lx = 0.0759; // x radius (m) (robot)
 double ly = 0.09; // y radius (m) (robot  )
 double rw = 0.0275; //wheel radius (m)
 
+double speed_array[4][1]; // array of speed values for the motors
 double control_effort_array[3][1]; // array of xyz control efforts from pid controlers
 
 
@@ -95,6 +105,66 @@ volatile int32_t Counter = 1; // Used to delay serial outputs
 
 SoftwareSerial BluetoothSerial(BLUETOOTH_RX, BLUETOOTH_TX);
 
+
+class RingBuf {
+  private:
+    int buffer[bufferSize];      // Array to hold the buffer
+    int front = 0;               // Index for the front of the buffer
+    int rear = 0;                // Index for the rear of the buffer
+    int size = 0;                // Current number of elements in the buffer
+    int pin;                    // pin number
+    double coefficent;             // coefficent for ADC -> cm equation
+    double exponent;            // exponent for ADC -> cm equation
+    long sum = 0;                // Sum of the elements in the buffer (long for large sums)
+
+    public:
+      RingBuf(int p, double coefficent, double exponent){
+        pin = p;
+        coefficent = coefficent;
+        exponent = exponent;
+        pinMode(pin, OUTPUT);
+      }
+      void intialise_buf(){
+           // Initialize the buffer with 0s (optional)
+          for (int i = 0; i < bufferSize; i++) {
+            buffer[i] = 0;
+          }
+      }
+
+      void push() {
+        if (size == bufferSize) {
+          // If the buffer is full, subtract the oldest value from the sum
+          sum -= buffer[front];
+          front = (front + 1) % bufferSize; // Move the front pointer forward
+        } else {
+          size++;
+        }
+
+        // Add the new value to the buffer and update the sum
+        // int value =  coefficent * pow(analogRead(pin), exponent);
+        int value = analogRead(pin);
+        buffer[rear] = value;  // Reading from analog pin;
+        sum += value;
+
+        // Move the rear pointer forward
+        rear = (rear + 1) % bufferSize;
+      }
+
+      // Function to calculate the moving average
+      int32_t movingAverage() {
+        if (size == 0) {
+          return 0; // Avoid division by zero if the buffer is empty
+        }
+        return (int32_t)sum / size;
+      }
+    };
+
+RingBuf IR_Long1(21, 3536.6,-0.86);
+RingBuf IR_Long2(19, 5928.2,-1.062);
+RingBuf IR_Short1(20,27126,-1.038);
+RingBuf IR_Short2(18,2261.8,-0.981);
+
+
 void setup(void) {
   turret_motor.attach(11);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -110,14 +180,13 @@ void setup(void) {
   delay(1000);
   SerialCom->println("Setup....");
 
-   // Initialize the buffer with 0s (optional)
-  for (int i = 0; i < bufferSize; i++) {
-    buffer[i] = 0;
-  }
 
   BluetoothSerial.begin(115200);
 
   delay(1000);  //settling time but no really needed
+
+  
+
 }
 
 void loop(void)  //main loop
@@ -135,20 +204,46 @@ void loop(void)  //main loop
       machine_state = stopped();
       break;
   };
-  Counter = Counter + 1;
- // if (Counter > 100000) {
-    //GYRO_reading(); // Serial output gyro reading, not wireless at this stage
-    //PIN_reading(A4); // Serial output IR sensor reading
-    int32_t cm = (int32_t) HC_SR04_range();
-    int distancec =  2712.6 * pow(analogRead(A4), -1.038);
-    int newValue = analogRead(A4);  // Reading from analog pin A0 (can be replaced with any other input)
+//   Counter = Counter + 1;
+//  // if (Counter > 100000) {
+//     //GYRO_reading(); // Serial output gyro reading, not wireless at this stage
+//     //PIN_reading(A4); // Serial output IR sensor reading
+//     int32_t cm = (int32_t) HC_SR04_range();
+//     int distancec =  2712.6 * pow(analogRead(A4), -1.038);
+//     int newValue = analogRead(A4);  // Reading from analog pin A0 (can be replaced with any other input)
   
-   // Push the new value into the buffer
-    push(newValue);
-    //serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
-    serialOutput(0, 0, movingAverage());
-    Counter = 0;
-  //}
+//    // Push the new value into the buffer
+//     push(newValue);
+//     //serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
+//     serialOutput(0, 0, movingAverage());
+//     Counter = 0;
+//   //}
+
+  // Gyro stuff
+  // unsigned long currentTime = micros(); // Get current time (ms)
+  // float deltaTime = (currentTime - lastTime) / 1e6; // Convert to s
+  // lastTime = currentTime;
+
+  // int rawValue = analogRead(gyroPin);
+  // float voltage = (rawValue / 1023.0) * referenceVoltage; // Convert to voltage
+  // float angularVelocity = (voltage - (zeroRate * referenceVoltage / 1023)) / sensitivity;
+
+  // angle += angularVelocity * deltaTime; // Equivalent to integrating
+
+  // serialOutput(0, 0, angle); // Output wirelessly
+  //
+
+    IR_Long1.push(); // Push the new value into the buffer
+    IR_Long2.push(); // Push the new value into the buffer
+    IR_Short1.push(); // Push the new value into the buffer
+    IR_Short2.push(); // Push the new value into the buffer
+
+    int32_t long1val = IR_Long1.movingAverage();
+    int32_t long2val = IR_Long2.movingAverage();
+    int32_t short1val = IR_Short1.movingAverage();
+    int32_t short2val = IR_Short2.movingAverage();
+    
+    serialOutput(0, 0, long1val); // print ir value
 }
 
 void push(int value) {
@@ -480,11 +575,10 @@ control_effort_array[2][1] = 10; // y
 control_effort_array[3][1] = 10; // z
 
 
-left_font_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]) );
-right_font_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]) );
-left_rear_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]) );
-right_rear_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]) );
-
+speed_array[1][1] = (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
+speed_array[2][1] = (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
+speed_array[3][1] = (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
+speed_array[4][1] = (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
 
 }
 
