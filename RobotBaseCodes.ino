@@ -25,7 +25,7 @@
 // Gyro stuff
 const int gyroPin = A3;
 const float sensitivity = 0.007; // Taken from data sheets
-const float referenceVoltage = 5; // For Arduino
+const float referenceVoltage = 5.0; // For Arduino
 const int zeroRate = 512; // Half of 1023, implies no rotation (check this is calibrated)
 float angle = 0; // Rotation from initial placement
 unsigned long lastTime = 0; 
@@ -220,30 +220,32 @@ void loop(void)  //main loop
 //   //}
 
   // Gyro stuff
-  // unsigned long currentTime = micros(); // Get current time (ms)
-  // float deltaTime = (currentTime - lastTime) / 1e6; // Convert to s
-  // lastTime = currentTime;
+  unsigned long currentTime = micros(); // Get current time (ms)
+  float deltaTime = (currentTime - lastTime) / 1e6; // Convert to s
+  lastTime = currentTime;
 
-  // int rawValue = analogRead(gyroPin);
-  // float voltage = (rawValue / 1023.0) * referenceVoltage; // Convert to voltage
+  int rawValue = analogRead(gyroPin);
+  float voltage = (float)(rawValue / 1023.0) * referenceVoltage; // Convert to voltage
   // float angularVelocity = (voltage - (zeroRate * referenceVoltage / 1023)) / sensitivity;
 
   // angle += angularVelocity * deltaTime; // Equivalent to integrating
 
-  // serialOutput(0, 0, angle); // Output wirelessly
+  serialOutput(0, 0, voltage); // Output wirelessly
+  delay(500);
   //
+  
 
-    IR_Long1.push(); // Push the new value into the buffer
-    IR_Long2.push(); // Push the new value into the buffer
-    IR_Short1.push(); // Push the new value into the buffer
-    IR_Short2.push(); // Push the new value into the buffer
+    // IR_Long1.push(); // Push the new value into the buffer
+    // IR_Long2.push(); // Push the new value into the buffer
+    // IR_Short1.push(); // Push the new value into the buffer
+    // IR_Short2.push(); // Push the new value into the buffer
 
-    int32_t long1val = IR_Long1.movingAverage();
-    int32_t long2val = IR_Long2.movingAverage();
-    int32_t short1val = IR_Short1.movingAverage();
-    int32_t short2val = IR_Short2.movingAverage();
+    // int32_t long1val = IR_Long1.movingAverage();
+    // int32_t long2val = IR_Long2.movingAverage();
+    // int32_t short1val = IR_Short1.movingAverage();
+    // int32_t short2val = IR_Short2.movingAverage();
     
-    serialOutput(0, 0, long1val); // print ir value
+    // serialOutput(0, 0, long1val); // print ir value
 }
 
 void push(int value) {
@@ -664,7 +666,7 @@ void PIN_reading(int pin) {
 
 
 // From wireless module
-void serialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
+void serialOutputMonitor(int32_t Value1, int32_t Value2, float Value3) {
   String Delimiter = ", ";
   Serial.print(Value1, DEC);
   Serial.print(Delimiter);
@@ -673,7 +675,7 @@ void serialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
   Serial.println(Value3, DEC);
 }
 
-void serialOutputPlotter(int32_t Value1, int32_t Value2, int32_t Value3) {
+void serialOutputPlotter(int32_t Value1, int32_t Value2, float Value3) {
   String Delimiter = ", ";
   Serial.print(Value1, DEC);
   Serial.print(Delimiter);
@@ -682,7 +684,7 @@ void serialOutputPlotter(int32_t Value1, int32_t Value2, int32_t Value3) {
   Serial.println(Value3, DEC);
 }
 
-void bluetoothSerialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3) {
+void bluetoothSerialOutputMonitor(int32_t Value1, int32_t Value2, float Value3) {
   String Delimiter = ", ";
   BluetoothSerial.print(Value1, DEC);
   BluetoothSerial.print(Delimiter);
@@ -695,7 +697,7 @@ void bluetoothSerialOutputMonitor(int32_t Value1, int32_t Value2, int32_t Value3
   // BluetoothSerial.print(out_char);
 }
 
-void serialOutput(int32_t Value1, int32_t Value2, int32_t Value3) {
+void serialOutput(int32_t Value1, int32_t Value2, float Value3) {
   if (OUTPUTMONITOR) {
     serialOutputMonitor(Value1, Value2, Value3);
   }
