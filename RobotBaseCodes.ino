@@ -71,6 +71,14 @@ Servo turret_motor;
 int speed_val = 100;
 int speed_change;
 
+
+const int bufferSize = 400;  // Fixed buffer size of 100
+int buffer[bufferSize];      // Array to hold the buffer
+int front = 0;               // Index for the front of the buffer
+int rear = 0;                // Index for the rear of the buffer
+int size = 0;                // Current number of elements in the buffer
+long sum = 0;                // Sum of the elements in the buffer (long for large sums)
+
 //Serial Pointer for USB com
 HardwareSerial *SerialCom;
 
@@ -94,6 +102,11 @@ void setup(void) {
   SerialCom->println("MECHENG706_Base_Code_25/01/2018");
   delay(1000);
   SerialCom->println("Setup....");
+
+   // Initialize the buffer with 0s (optional)
+  for (int i = 0; i < bufferSize; i++) {
+    buffer[i] = 0;
+  }
 
   BluetoothSerial.begin(115200);
 
@@ -121,13 +134,40 @@ void loop(void)  //main loop
     //PIN_reading(A4); // Serial output IR sensor reading
     int32_t cm = (int32_t) HC_SR04_range();
     int distancec =  2712.6 * pow(analogRead(A4), -1.038);
-
+    int newValue = analogRead(A4);  // Reading from analog pin A0 (can be replaced with any other input)
+  
+   // Push the new value into the buffer
+    push(newValue);
     //serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
-    serialOutput(0, 0, distancec);
+    serialOutput(0, 0, movingAverage());
     Counter = 0;
   //}
 }
 
+void push(int value) {
+  if (size == bufferSize) {
+    // If the buffer is full, subtract the oldest value from the sum
+    sum -= buffer[front];
+    front = (front + 1) % bufferSize; // Move the front pointer forward
+  } else {
+    size++;
+  }
+
+  // Add the new value to the buffer and update the sum
+  buffer[rear] = value;
+  sum += value;
+
+  // Move the rear pointer forward
+  rear = (rear + 1) % bufferSize;
+}
+
+// Function to calculate the moving average
+int32_t movingAverage() {
+  if (size == 0) {
+    return 0; // Avoid division by zero if the buffer is empty
+  }
+  return (int32_t)sum / size;
+}
 
 STATE initialising() {
   //initialising
