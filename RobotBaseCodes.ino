@@ -118,10 +118,10 @@ class RingBuf {
     long sum = 0;                // Sum of the elements in the buffer (long for large sums)
 
     public:
-      RingBuf(int p, double coefficent, double exponent){
+      RingBuf(int p, double c, double e){
         pin = p;
-        coefficent = coefficent;
-        exponent = exponent;
+        coefficent = c;
+        exponent = e;
         pinMode(pin, OUTPUT);
       }
       void intialise_buf(){
@@ -141,8 +141,8 @@ class RingBuf {
         }
 
         // Add the new value to the buffer and update the sum
-        // int value =  coefficent * pow(analogRead(pin), exponent);
-        int value = analogRead(pin);
+        int value =  (int) coefficent * pow(analogRead(pin), exponent);
+        // int value = analogRead(pin);
         buffer[rear] = value;  // Reading from analog pin;
         sum += value;
 
