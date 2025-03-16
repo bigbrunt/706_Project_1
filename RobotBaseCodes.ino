@@ -22,6 +22,7 @@
 #include <Servo.h>  //Need for Servo pulse output
 #include <SoftwareSerial.h> // For wireless communication
 
+
 // Serial Data input pin
 #define BLUETOOTH_RX 10
 // Serial Data output pin
@@ -66,6 +67,12 @@ Servo left_rear_motor;   // create servo object to control Vex Motor Controller 
 Servo right_rear_motor;  // create servo object to control Vex Motor Controller 29
 Servo right_font_motor;  // create servo object to control Vex Motor Controller 29
 Servo turret_motor;
+
+double lx = 0.0759; // x radius (m) (robot)
+double ly = 0.09; // y radius (m) (robot  )
+double rw = 0.0275; //wheel radius (m)
+
+double control_effort_array[3][1]; // array of xyz control efforts from pid controlers
 
 
 int speed_val = 100;
@@ -468,16 +475,21 @@ void read_serial_command() {
 
 
 void goToWall(){
-  // int32_t power, kp,ki,kd;
-  // kp = 10;
-  // ki = 1;
-  // kd = 3;
-  
-  // power = HC_SR04_range() * kp;
+control_effort_array[1][1] = 10; // x
+control_effort_array[2][1] = 10; // y
+control_effort_array[3][1] = 10; // z
 
+
+left_font_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]) );
+right_font_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]) );
+left_rear_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]) );
+right_rear_motor.writeMicroseconds(1500 + (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]) );
 
 
 }
+
+
+
 //----------------------Motor moments------------------------
 //The Vex Motor Controller 29 use Servo Control signals to determine speed and direction, with 0 degrees meaning neutral https://en.wikipedia.org/wiki/Servo_control
 
