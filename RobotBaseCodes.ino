@@ -24,11 +24,19 @@
 
 // Gyro stuff
 const int gyroPin = A3;
-const float sensitivity = 0.007; // Taken from data sheets
-const float referenceVoltage = 5.0; // For Arduino
-const int zeroRate = 512; // Half of 1023, implies no rotation (check this is calibrated)
-float angle = 0; // Rotation from initial placement
-unsigned long lastTime = 0; 
+int T = 100; // For 1 super loop
+int sensorValue = 0;
+float gyroSupplyVoltage = 5;
+float gyroZeroVoltage = 0; // Voltage when not rotating
+float gyroSensitivity = 0.007; // Taken from data sheets
+float rotationThreshold = 3; // For gyro drift correction
+float gyroRate = 0;
+float currentAngle = 0;
+// const float referenceVoltage = 5.0; // For Arduino
+// const int zeroRate = 512; // Half of 1023, implies no rotation (check this is calibrated)
+// float angle = 0; // Rotation from initial placement
+// unsigned long lastTime = 0; 
+// float rotationThreshold = 1.5; // For gyro drift
 //
 
 
@@ -183,10 +191,18 @@ void setup(void) {
 
   BluetoothSerial.begin(115200);
 
-  delay(1000);  //settling time but no really needed
+  //delay(1000);  //settling time but no really needed
 
-  
-
+  // Gyro stuff
+  int i;
+  float sum = 0;
+  for (i=0; i<100; i++) {
+    sensorValue = analogRead(gyroPin);
+    sum += sensorValue;
+    delay(5);
+  }
+  gyroZeroVoltage = sum/100;
+  //
 }
 
 void loop(void)  //main loop
@@ -220,20 +236,32 @@ void loop(void)  //main loop
 //   //}
 
   // Gyro stuff
-  unsigned long currentTime = micros(); // Get current time (ms)
-  float deltaTime = (currentTime - lastTime) / 1e6; // Convert to s
-  lastTime = currentTime;
+  // unsigned long currentTime = micros(); // Get current time (ms)
+  // float deltaTime = (currentTime - lastTime) / 1e6; // Convert to s
+  // lastTime = currentTime;
 
-  int rawValue = analogRead(gyroPin);
-  float voltage = (float)(rawValue / 1023.0) * referenceVoltage; // Convert to voltage
-  float angularVelocity = (voltage - (zeroRate * referenceVoltage / 1023)) / sensitivity;
+  // int rawValue = analogRead(gyroPin);
+  // float voltage = (float)(rawValue / 1023.0) * referenceVoltage; // Convert to voltage
+  // float angularVelocity = (voltage - (zeroRate * referenceVoltage / 1023)) / sensitivity;
 
-  angle += angularVelocity * deltaTime; // Equivalent to integrating
+  // if ((angularVelocity >= rotationThreshold) || (angularVelocity <= -rotationThreshold)) {
+  //   angle += angularVelocity * deltaTime; // Equivalent to integrating
+  // }
 
-  serialOutput(0, 0, angle); // Output wirelessly
-  goToWall();
+  gyroRate = (analogRead(gyroPin)*gyroSupplyVoltage)/1023; // Convert to voltage
+  gyroRate -= (gyroZeroVoltage/1023*gyroSupplyVoltage); // Gyro drift?
+  float angularVelocity = gyroRate/gyroSensitivity; // From data sheet
+
+  if (angularVelocity >= rotationThreshold || angularVelocity <= -rotationThreshold) {
+    float angleChange = angularVelocity/(1000/T);
+    currentAngle += angleChange;
+  }
+
+  serialOutput(0, 0, currentAngle); // Output wirelessly
+  delay(T);
   //
-  
+
+  // goToWall();
 
     // IR_Long1.push(); // Push the new value into the buffer
     // IR_Long2.push(); // Push the new value into the buffer
