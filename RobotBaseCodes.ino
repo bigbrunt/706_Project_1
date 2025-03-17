@@ -248,6 +248,7 @@ void loop(void)  //main loop
   //   angle += angularVelocity * deltaTime; // Equivalent to integrating
   // }
 
+  // Always running this code to keep track of orientation? Or put in rotate func
   gyroRate = (analogRead(gyroPin)*gyroSupplyVoltage)/1023; // Convert to voltage
   gyroRate -= (gyroZeroVoltage/1023*gyroSupplyVoltage); // Gyro drift?
   float angularVelocity = gyroRate/gyroSensitivity; // From data sheet
@@ -257,8 +258,21 @@ void loop(void)  //main loop
     currentAngle += angleChange;
   }
 
-  serialOutput(0, 0, currentAngle); // Output wirelessly
+  // serialOutput(0, 0, currentAngle); // Output wirelessly
   delay(T);
+  // rotateDeg(360);
+
+  // gyroRate = (analogRead(gyroPin)*gyroSupplyVoltage)/1023; // Convert to voltage
+  // gyroRate -= (gyroZeroVoltage/1023*gyroSupplyVoltage); // Gyro drift?
+  // float angularVelocity = gyroRate/gyroSensitivity; // From data sheet
+
+  // if (angularVelocity >= rotationThreshold || angularVelocity <= -rotationThreshold) {
+  //   float angleChange = angularVelocity/(1000/T);
+  //   currentAngle += angleChange;
+  // }
+
+  // serialOutput(0, 0, currentAngle); // Output wirelessly
+  // delay(T);
   //
 
   // goToWall();
@@ -275,6 +289,23 @@ void loop(void)  //main loop
     
     // serialOutput(0, 0, long1val); // print ir value
 }
+
+
+void rotateDeg(int deg) {
+  if (deg > 0) {
+    while (currentAngle < deg) {
+      // rotate cw
+      
+    }
+  } else {
+    while (currentAngle > deg) {
+      // rotate ccw
+      
+    }
+  }
+}
+  
+
 
 void push(int value) {
   if (size == bufferSize) {
