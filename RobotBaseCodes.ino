@@ -231,7 +231,7 @@ void loop(void)  //main loop
   angle += angularVelocity * deltaTime; // Equivalent to integrating
 
   serialOutput(0, 0, angle); // Output wirelessly
-  delay(500);
+  goToWall();
   //
   
 
@@ -571,19 +571,41 @@ void read_serial_command() {
 }
 
 
-void goToWall(){
-control_effort_array[1][1] = 10; // x
-control_effort_array[2][1] = 10; // y
-control_effort_array[3][1] = 10; // z
-
-
-speed_array[1][1] = (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
-speed_array[2][1] = (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
-speed_array[3][1] = (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
-speed_array[4][1] = (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
+void calcSpeed(){
+speed_array[1][1] = (int) (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
+speed_array[2][1] = (int) (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
+speed_array[3][1] = (int) (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
+speed_array[4][1] = (int) (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
 
 }
 
+void control(){
+  control_effort_array[1][1] = 10; // x
+  control_effort_array[2][1] = 0; // y
+  control_effort_array[3][1] = 0; // z
+
+  
+
+}
+
+void goToWall(){
+ 
+  while(HC_SR04_range() > 10){
+    control_effort_array[1][1] = 10;
+    calcSpeed();
+    move();
+    SerialCom->println(control_effort_array[2][1]);
+  }
+  stop();
+  
+}
+
+void move() {
+  left_font_motor.writeMicroseconds(1500 + speed_array[1][1]);
+  left_rear_motor.writeMicroseconds(1500 + speed_array[4][1]);
+  right_rear_motor.writeMicroseconds(1500 - speed_array[3][1]);
+  right_font_motor.writeMicroseconds(1500 - speed_array[2][1]);
+}
 
 
 //----------------------Motor moments------------------------
@@ -621,6 +643,7 @@ void forward() {
   right_rear_motor.writeMicroseconds(1500 - speed_val);
   right_font_motor.writeMicroseconds(1500 - speed_val);
 }
+
 
 void reverse() {
   left_font_motor.writeMicroseconds(1500 - speed_val);
