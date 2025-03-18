@@ -23,6 +23,68 @@
 #include <SoftwareSerial.h> // For wireless communication
 #include <Arduino.h>
 
+// Vector class stuff
+
+class Vector {
+private:
+    float* data;      // Pointer to dynamically allocated array
+    int capacity;     // Capacity of the array
+    int size;         // Current number of elements in the array
+
+public:
+    // Constructor to initialize vector with a given capacity
+    Vector(int initialCapacity = 1000) {
+        capacity = initialCapacity;
+        size = 0;
+        data = new float[capacity];  // Dynamically allocate memory for the array
+    }
+
+    // Destructor to free dynamically allocated memory
+    ~Vector() {
+        delete[] data;
+    }
+
+    // Function to add a value to the vector (ignores zeros)
+    void add(float value) {
+        if (size >= capacity) {
+            resize(capacity * 2);  // Resize array if it is full
+        }
+        data[size++] = value;  // Add the value and increment size
+    }
+
+
+
+    // Function to find the index of the smallest element
+    int getMinIndex() const {
+        if (size == 0) return -1;  // Handle empty vector
+        int minIndex = 0;
+        for (int i = 1; i < size; i++) {
+            if (data[i] < data[minIndex]) {
+                minIndex = i;
+            }
+        }
+        return minIndex;
+    }
+
+
+    // Function to get the current size of the vector
+    int getSize() const {
+        return size;
+    }
+
+private:
+    // Helper function to resize the array when full
+    void resize(int newCapacity) {
+        float* newData = new float[newCapacity];
+        for (int i = 0; i < size; i++) {
+            newData[i] = data[i];
+        }
+        delete[] data;  // Free the old array
+        data = newData;  // Assign new array to data pointer
+        capacity = newCapacity;  // Update capacity
+    }
+};
+//
 
 // Gyro stuff
 const int gyroPin = A3;
@@ -40,6 +102,9 @@ float currentAngle = 0;
 // unsigned long lastTime = 0; 
 // float rotationThreshold = 1.5; // For gyro drift
 //
+
+// Create an instance of the Vector class
+Vector sonarReadings;
 
 
 // Serial Data input pin
@@ -358,7 +423,7 @@ void findCorner() {
   //   // serialOutput(0, 0, value); // Sensor L1
   //   delay(1000);  
   // }
-
+  
   while (currentAngle < 360) {
     // Rotate clockwise (adjust speed_val as needed) // Move this out of loop?
     left_front_motor.writeMicroseconds(1500 + speed_val);
@@ -366,12 +431,12 @@ void findCorner() {
     right_front_motor.writeMicroseconds(1500 + speed_val);
     right_rear_motor.writeMicroseconds(1500 + speed_val);
 
-    // Update smallest reading
-    currentReading = HC_SR04_range();
-    if (currentReading < smallestReading) { // Order works? Not bad for gyro drift?
-      smallestReading = currentReading;
-      smallestReadingDeg = currentAngle;
-    }
+    // // Update smallest reading
+    // currentReading = HC_SR04_range();
+    // if (currentReading < smallestReading) { // Order works? Not bad for gyro drift?
+    //   smallestReading = currentReading;
+    //   smallestReadingDeg = currentAngle;
+    // }
 
     // Time calculation (in seconds)
     unsigned long currentTime = micros();
@@ -394,17 +459,25 @@ void findCorner() {
     // Take sonar readings
     // Takes too many
     // serialOutput(0, 0, HC_SR04_range()); // Test what this function outputs
+    sonarReadings.add(HC_SR04_range());
    
   }
 
   stop(); // Doesnt seem to stop wheels, doesent really matter
+
+  // Find closest wall
+  int minIndex = sonarReadings.getMinIndex();
+  int size = sonarReadings.getSize();
+  float degPerReading = 360/size;
+  float degClosestWall = degPerReading * minIndex;
+
 
   // Rotate to closest wall
   currentAngle = 0;
 
   lastTime = micros();
   
-  while (currentAngle < smallestReadingDeg) {
+  while (currentAngle < degClosestWall) {
     // Rotate clockwise (adjust speed_val as needed)
     left_front_motor.writeMicroseconds(1500 + speed_val);
     left_rear_motor.writeMicroseconds(1500 + speed_val);
@@ -429,6 +502,8 @@ void findCorner() {
   // Stop motors after completing 360° rotation
   stop();
 }
+
+
 
 void push(int value) {
   if (size == bufferSize) {
