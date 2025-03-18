@@ -21,6 +21,8 @@
 */
 #include <Servo.h>  //Need for Servo pulse output
 #include <SoftwareSerial.h> // For wireless communication
+#include <Arduino.h>
+
 
 // Gyro stuff
 const int gyroPin = A3;
@@ -256,15 +258,15 @@ void loop(void)  //main loop
   //   angle += angularVelocity * deltaTime; // Equivalent to integrating
   // }
 
-  // Always running this code to keep track of orientation
-  gyroRate = (analogRead(gyroPin)*gyroSupplyVoltage)/1023; // Convert to voltage
-  gyroRate -= (gyroZeroVoltage/1023*gyroSupplyVoltage); // Gyro drift?
-  float angularVelocity = gyroRate/gyroSensitivity; // From data sheet
+  // // Always running this code to keep track of orientation
+  // gyroRate = (analogRead(gyroPin)*gyroSupplyVoltage)/1023; // Convert to voltage
+  // gyroRate -= (gyroZeroVoltage/1023*gyroSupplyVoltage); // Gyro drift?
+  // float angularVelocity = gyroRate/gyroSensitivity; // From data sheet
 
-  if (angularVelocity >= rotationThreshold || angularVelocity <= -rotationThreshold) {
-    float angleChange = angularVelocity/(1000/T);
-    currentAngle += angleChange;
-  }
+  // if (angularVelocity >= rotationThreshold || angularVelocity <= -rotationThreshold) {
+  //   float angleChange = angularVelocity/(1000/T);
+  //   currentAngle += angleChange;
+  // }
 
   // serialOutput(0, 0, currentAngle); // Output wirelessly
   //delay(T);
@@ -338,9 +340,71 @@ void findCorner() {
   // Ensure initial angle is reset
   currentAngle = 0;
 
+  float currentReading = 300;
+  float smallestReading = 300;
+  float smallestReadingDeg = 0;
+
   unsigned long lastTime = micros();  // Record the starting time
 
+  // // Sorting out sonar readings
+  // left_front_motor.writeMicroseconds(1500 + speed_val);
+  // left_rear_motor.writeMicroseconds(1500 + speed_val);
+  // right_front_motor.writeMicroseconds(1500 + speed_val);
+  // right_rear_motor.writeMicroseconds(1500 + speed_val);
+
+  // while (1) {
+  //   serialOutput(0, 0, HC_SR04_range());
+  //   // float value =  (float) 3536.6 * pow(analogRead(A7), -0.86); // Hopefully this calculates LR1 sensor distance
+  //   // serialOutput(0, 0, value); // Sensor L1
+  //   delay(1000);  
+  // }
+
   while (currentAngle < 360) {
+    // Rotate clockwise (adjust speed_val as needed) // Move this out of loop?
+    left_front_motor.writeMicroseconds(1500 + speed_val);
+    left_rear_motor.writeMicroseconds(1500 + speed_val);
+    right_front_motor.writeMicroseconds(1500 + speed_val);
+    right_rear_motor.writeMicroseconds(1500 + speed_val);
+
+    // Update smallest reading
+    currentReading = HC_SR04_range();
+    if (currentReading < smallestReading) { // Order works? Not bad for gyro drift?
+      smallestReading = currentReading;
+      smallestReadingDeg = currentAngle;
+    }
+
+    // Time calculation (in seconds)
+    unsigned long currentTime = micros();
+    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+    lastTime = currentTime;
+
+    // Read gyro and calculate angular velocity
+    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+
+    // Update angle (integrate angular velocity)
+    if (abs(angularVelocity) > rotationThreshold) {
+      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+    }
+
+    // Debugging output
+    // serialOutput(0, 0, currentAngle);
+
+    // Take sonar readings
+    // Takes too many
+    // serialOutput(0, 0, HC_SR04_range()); // Test what this function outputs
+   
+  }
+
+  stop(); // Doesnt seem to stop wheels, doesent really matter
+
+  // Rotate to closest wall
+  currentAngle = 0;
+
+  lastTime = micros();
+  
+  while (currentAngle < smallestReadingDeg) {
     // Rotate clockwise (adjust speed_val as needed)
     left_front_motor.writeMicroseconds(1500 + speed_val);
     left_rear_motor.writeMicroseconds(1500 + speed_val);
@@ -361,17 +425,10 @@ void findCorner() {
     if (abs(angularVelocity) > rotationThreshold) {
       currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
     }
-
-    // Debugging output
-    serialOutput(0, 0, currentAngle);
   }
-
   // Stop motors after completing 360° rotation
   stop();
 }
-
-  
-
 
 void push(int value) {
   if (size == bufferSize) {
