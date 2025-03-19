@@ -1,8 +1,8 @@
-#ifndef KALMAN_FILTER_H
-#define KALMAN_FILTER_H
+#ifndef SENSOR_FILTER_H
+#define SENSOR_FILTER_H
 
-//ensure you #include "KalmanFilter.h"
-//to include in main - define e.g. KalmanFilter filter(0.01, 5, 0, 1);
+//ensure you #include "SensorFilter.h"
+//to include in main - define e.g. SensorFilter filter(0.01, 5, 0, 1);
 // // Apply Kalman filter - float filteredDistance = fliter.update(distance);
 
 
