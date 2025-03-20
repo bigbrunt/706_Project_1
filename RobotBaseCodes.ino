@@ -168,8 +168,10 @@ void findCorner() {
   float currentReading = 300;
   float smallestReading = 300;
   float smallestReadingDeg = 0;
-  float nextWallDeg = 90; // smallestReadingDeg + 90 (this logic will need to be changed, add some sort of check)
+  float nextWallDeg = 90; // smallestReadingDeg + 90 
+  float nextNextWallDeg = 180; // nextWallDeg + 90
   float nextWallReading = 300;
+  float nextNextWallReading = 300;
 
   // Rotate clockwise (adjust speed_val as needed) // Moved this out of loop
   left_front_motor.writeMicroseconds(1500 + speed_val);
@@ -187,11 +189,15 @@ void findCorner() {
       nextWallDeg = smallestReadingDeg + 90;
     }
 
-    // For debugging 
-    serialOutput(0, 0, smallestReading);
+    // // For debugging 
+    // serialOutput(0, 0, smallestReading);
 
-    if (-0.5 <= (currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg
+    if (-0.5 <= (currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
        nextWallReading = HC_SR04_range();
+    }
+
+    if (-0.5 <= (currentAngle - nextNextWallDeg) <= 0.5) { // Within +- 0.5 deg
+       nextNextWallReading = HC_SR04_range();
     }
 
     // Time calculation (in seconds)
@@ -214,14 +220,14 @@ void findCorner() {
   delay(1000);
 
   // Check that smallest wall and next wall match
-  if (smallestReadingDeg > 270) { // The reading wont match up
+  if (smallestReadingDeg > 180) { // The reading wont match up
     // Rotate clockwise (adjust speed_val as needed) // Add code for acw if faster
     left_front_motor.writeMicroseconds(1500 + speed_val);
     left_rear_motor.writeMicroseconds(1500 + speed_val);
     right_front_motor.writeMicroseconds(1500 + speed_val);
     right_rear_motor.writeMicroseconds(1500 + speed_val);
 
-    while (currentAngle < (smallestReadingDeg + 90)) { // Need to make this design more modular
+    while (currentAngle < (smallestReadingDeg + 180)) { // Need to make this design more modular
       // Keep spinning and updating
 
       // Time calculation (in seconds)
@@ -238,16 +244,26 @@ void findCorner() {
       if (abs(angularVelocity) > rotationThreshold) {
         currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
       }
+
+      if (-0.5 <= (currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
+       nextWallReading = HC_SR04_range();
+      }
     }
 
     stop();
     delay(1000);
 
-    nextWallReading = HC_SR04_range();
+    nextNextWallReading = HC_SR04_range();
   }
   // For debugging
   serialOutput(0, 0, smallestReading);
   serialOutput(0, 0, nextWallReading);
+  serialOutput(0, 0, nextNextWallReading);
+
+  // // Find closest corner
+  // float a = smallestReading;
+  // float b = nextWallReading;
+  // float c = 
 }
 
 STATE initialising() {
