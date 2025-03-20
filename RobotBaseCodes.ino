@@ -183,10 +183,11 @@ void findCorner() {
     // Find closest wall
     currentReading = HC_SR04_range();
 
-    if (currentReading <= smallestReading && currentReading > 0) { // Only consider real readings 
+    if (currentReading <= smallestReading && currentReading > 1) { // Only consider valid readings 
       smallestReading = currentReading;
       smallestReadingDeg = currentAngle;
       nextWallDeg = smallestReadingDeg + 90;
+      nextNextWallDeg = nextWallDeg + 90;
     }
 
     // // For debugging 
