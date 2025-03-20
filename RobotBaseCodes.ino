@@ -179,7 +179,7 @@ void findCorner() {
 
   while (currentAngle < 360) {
     // Add readings to vector
-    //sonarReadings.add(HC_SR04_range()); // TOO SLOW
+    //sonarReadings.add(HC_SR04_range()); // TOO SLOW // Making a change so I can commit
     
     // Debugging
     serialOutput(0, 0, currentAngle);
