@@ -19,16 +19,15 @@
   Modified: 15/02/2018
   Author: Logan Stuart
 */
+
 #include <Servo.h>           //Need for Servo pulse output
 #include <SoftwareSerial.h>  // For wireless communication
 #include <Arduino.h>
 
 #include "RingBuf.h"
-#include "Vector.h"
 
 // Gyro stuff
 const int gyroPin = A3;
-int T = 100;  // For 1 super loop
 int sensorValue = 0;
 float gyroSupplyVoltage = 5;
 float gyroZeroVoltage = 0;      // Voltage when not rotating
@@ -36,7 +35,6 @@ float gyroSensitivity = 0.007;  // Taken from data sheets
 float rotationThreshold = 3;    // For gyro drift correction
 float gyroRate = 0;
 float currentAngle = 0;
-//
 
 // Serial Data input pin
 #define BLUETOOTH_RX 10
@@ -69,7 +67,6 @@ const byte left_rear = 47;
 const byte right_rear = 50;
 const byte right_front = 51;
 
-
 //Default ultrasonic ranging sensor pins, these pins are defined my the Shield
 const int TRIG_PIN = 48;
 const int ECHO_PIN = 49;
@@ -90,7 +87,6 @@ double rw = 0.0275;  //wheel radius (m)
 double speed_array[4][1];           // array of speed values for the motors
 double control_effort_array[3][1];  // array of xyz control efforts from pid controlers
 
-
 int speed_val = 100;
 int speed_change;
 
@@ -107,8 +103,6 @@ RingBuf IR_Long1(21, 3536.6, -0.86);
 RingBuf IR_Long2(19, 5928.2, -1.062);
 RingBuf IR_Short1(20, 27126, -1.038);
 RingBuf IR_Short2(18, 2261.8, -0.981);
-
-Vector sonarReadings;
 
 void setup(void) {
   turret_motor.attach(11);
@@ -138,7 +132,6 @@ void setup(void) {
     delay(5);
   }
   gyroZeroVoltage = sum / 100;
-  //
 
   // Needed to get the robot moving
   left_front_motor.attach(left_front);
@@ -146,7 +139,7 @@ void setup(void) {
   right_front_motor.attach(right_front);
   right_rear_motor.attach(right_rear);
 
-  findCorner();  // Need to define this function
+  findCorner();
 }
 
 void loop(void)  //main loop
@@ -171,6 +164,13 @@ void findCorner() {
   currentAngle = 0;
   unsigned long lastTime = micros();  // Record the starting time
 
+  // To find closest wall
+  float currentReading = 300;
+  float smallestReading = 300;
+  float smallestReadingDeg = 0;
+  float nextWallDeg = 90; // smallestReadingDeg + 90 (this logic will need to be changed, add some sort of check)
+  float nextWallReading = 300;
+
   // Rotate clockwise (adjust speed_val as needed) // Moved this out of loop
   left_front_motor.writeMicroseconds(1500 + speed_val);
   left_rear_motor.writeMicroseconds(1500 + speed_val);
@@ -178,11 +178,18 @@ void findCorner() {
   right_rear_motor.writeMicroseconds(1500 + speed_val);
 
   while (currentAngle < 360) {
-    // Add readings to vector
-    //sonarReadings.add(HC_SR04_range()); // TOO SLOW // Making a change so I can commit
-    
-    // Debugging
-    serialOutput(0, 0, currentAngle);
+    // Find closest wall
+    currentReading = HC_SR04_range();
+
+    if (currentReading <= smallestReading && currentReading > 0) { // Only consider real readings
+      smallestReading = currentReading;
+      smallestReadingDeg = currentAngle;
+      nextWallDeg = smallestReadingDeg + 90;
+    }
+
+    if (-0.5 <= (currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg
+       nextWallReading = HC_SR04_range();
+    }
 
     // Time calculation (in seconds)
     unsigned long currentTime = micros();
@@ -200,43 +207,44 @@ void findCorner() {
     }
   }
 
-  stop();  // Doesnt seem to stop wheels, doesent really matter - try delay
-  delay(2000);
-
-  // // Determine closest wall
-  // int size = sonarReadings.size();
-  // float degPerReading = 360/size;
-  // int smallestReadIndex = sonarReadings.indexOfSmallest();
-  // float degToSpin = degPerReading * smallestReadIndex;
-
-  // Rotate clockwise (adjust speed_val as needed)
-  left_front_motor.writeMicroseconds(1500 + speed_val);
-  left_rear_motor.writeMicroseconds(1500 + speed_val);
-  right_front_motor.writeMicroseconds(1500 + speed_val);
-  right_rear_motor.writeMicroseconds(1500 + speed_val);
-
-  // Rotate to closest wall
-  currentAngle = 0;
-  lastTime = micros();
-
-  while (currentAngle < 360) { // UPDATE 360 PART
-    // Time calculation (in seconds)
-    unsigned long currentTime = micros();
-    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-    lastTime = currentTime;
-
-    // Read gyro and calculate angular velocity
-    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-    // Update angle (integrate angular velocity)
-    if (abs(angularVelocity) > rotationThreshold) {
-      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-    }
-  }
-  // Stop motors after completing rotation
   stop();
+  delay(1000);
+
+  // Check that smallest wall and next wall match
+  if (smallestReadingDeg > 270) { // The reading wont match up
+    // Rotate clockwise (adjust speed_val as needed) // Add code for acw if faster
+    left_front_motor.writeMicroseconds(1500 + speed_val);
+    left_rear_motor.writeMicroseconds(1500 + speed_val);
+    right_front_motor.writeMicroseconds(1500 + speed_val);
+    right_rear_motor.writeMicroseconds(1500 + speed_val);
+
+    while (currentAngle < (smallestReadingDeg + 90)) { // Need to make this design more modular
+      // Keep spinning and updating
+
+      // Time calculation (in seconds)
+      unsigned long currentTime = micros();
+      float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+      lastTime = currentTime;
+
+      // Read gyro and calculate angular velocity
+      float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+      float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+      float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+
+      // Update angle (integrate angular velocity)
+      if (abs(angularVelocity) > rotationThreshold) {
+        currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+      }
+    }
+
+    stop();
+    delay(1000);
+
+    nextWallReading = HC_SR04_range();
+  }
+  // For debugging
+  serialOutput(0, 0, smallestReading);
+  serialOutput(0, 0, nextWallReading);
 }
 
 STATE initialising() {
