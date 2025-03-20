@@ -181,11 +181,14 @@ void findCorner() {
     // Find closest wall
     currentReading = HC_SR04_range();
 
-    if (currentReading <= smallestReading && currentReading > 0) { // Only consider real readings
+    if (currentReading <= smallestReading && currentReading > 0) { // Only consider real readings 
       smallestReading = currentReading;
       smallestReadingDeg = currentAngle;
       nextWallDeg = smallestReadingDeg + 90;
     }
+
+    // For debugging 
+    serialOutput(0, 0, smallestReading);
 
     if (-0.5 <= (currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg
        nextWallReading = HC_SR04_range();
