@@ -284,7 +284,9 @@ void findCorner() {
 
   float minh = min(h1, h2);
 
+  // For debugging
   serialOutput(0, 0, minh);
+  serialOutput(0, 0, currentAngle);
   
   if (minh == h1) {
     // Turn to face h1 (clockwise fastest)
@@ -293,7 +295,8 @@ void findCorner() {
     left_rear_motor.writeMicroseconds(1500 + speed_val);
     right_front_motor.writeMicroseconds(1500 + speed_val);
     right_rear_motor.writeMicroseconds(1500 + speed_val);
-    while (currentAngle < theta) { // Need to make this design more modular
+
+    while (currentAngle < (360 + theta)) { // Need to make this design more modular
       // Keep spinning and updating
 
       // For debugging
@@ -316,7 +319,8 @@ void findCorner() {
     left_rear_motor.writeMicroseconds(1500 - speed_val);
     right_front_motor.writeMicroseconds(1500 - speed_val);
     right_rear_motor.writeMicroseconds(1500 - speed_val);
-    while (currentAngle < theta) { // Need to make this design more modular
+    
+    while (currentAngle > (360 - theta)) { // Need to make this design more modular
       // Keep spinning and updating
 
       // For debugging
