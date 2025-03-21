@@ -231,6 +231,9 @@ void findCorner() {
     while (currentAngle < (smallestReadingDeg + 180)) { // Need to make this design more modular
       // Keep spinning and updating
 
+      // For debugging
+      serialOutput(0, 0, currentAngle);
+
       // Time calculation (in seconds)
       unsigned long currentTime = micros();
       float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
