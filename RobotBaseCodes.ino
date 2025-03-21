@@ -265,10 +265,75 @@ void findCorner() {
   serialOutput(0, 0, nextWallReading);
   serialOutput(0, 0, nextNextWallReading);
 
-  // // Find closest corner
-  // float a = smallestReading;
-  // float b = nextWallReading;
-  // float c = 
+  // Find closest corner
+  float a = smallestReading;
+  float b = nextWallReading;
+  float c = nextNextWallReading;
+  float d;
+  
+  if ((a + c) > 140) { // Solid margin of error
+    // They constitute the long side
+    d = 120 - b; // Check these values (120)
+  } else {
+    d = 200 - b;
+  }
+
+  // Calc 2 hypotenuses (must use closest wall)
+  float h1 = sqrt(pow(a, 2) + pow(b, 2));
+  float h2 = sqrt(pow(a, 2) + pow(d, 2));
+
+  float minh = min(h1, h2);
+
+  serialOutput(0, 0, minh);
+  
+  if (minh == h1) {
+    // Turn to face h1 (clockwise fastest)
+    float theta = atan(b/a);
+    left_front_motor.writeMicroseconds(1500 + speed_val);
+    left_rear_motor.writeMicroseconds(1500 + speed_val);
+    right_front_motor.writeMicroseconds(1500 + speed_val);
+    right_rear_motor.writeMicroseconds(1500 + speed_val);
+    while (currentAngle < theta) { // Need to make this design more modular
+      // Keep spinning and updating
+
+      // For debugging
+      serialOutput(0, 0, currentAngle);
+
+      // Time calculation (in seconds)
+      unsigned long currentTime = micros();
+      float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+      lastTime = currentTime;
+
+      // Read gyro and calculate angular velocity
+      float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+      float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+      float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+    }
+  } else { // Note acw will be faster, change later
+    // Turnt to face h2
+    float theta = atan(d/a);
+    left_front_motor.writeMicroseconds(1500 - speed_val);
+    left_rear_motor.writeMicroseconds(1500 - speed_val);
+    right_front_motor.writeMicroseconds(1500 - speed_val);
+    right_rear_motor.writeMicroseconds(1500 - speed_val);
+    while (currentAngle < theta) { // Need to make this design more modular
+      // Keep spinning and updating
+
+      // For debugging
+      serialOutput(0, 0, currentAngle);
+
+      // Time calculation (in seconds)
+      unsigned long currentTime = micros();
+      float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+      lastTime = currentTime;
+
+      // Read gyro and calculate angular velocity
+      float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+      float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+      float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+    }
+  }
+  stop();
 }
 
 STATE initialising() {
