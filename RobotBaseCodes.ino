@@ -164,7 +164,7 @@ void findCorner() {
   currentAngle = 0;
   unsigned long lastTime = micros();  // Record the starting time
 
-  // To find closest wall
+  // To find closest wall and next 2
   float currentReading = 300;
   float smallestReading = 300;
   float smallestReadingDeg = 0;
@@ -183,21 +183,21 @@ void findCorner() {
     // Find closest wall
     currentReading = HC_SR04_range();
 
-    if (currentReading <= smallestReading && currentReading > 1) { // Only consider valid readings 
+    if (currentReading < smallestReading && currentReading > 0) { // Only consider valid readings 
       smallestReading = currentReading;
       smallestReadingDeg = currentAngle;
       nextWallDeg = smallestReadingDeg + 90;
       nextNextWallDeg = nextWallDeg + 90;
     }
 
-    // // For debugging 
-    // serialOutput(0, 0, smallestReading);
+    // For debugging 
+    serialOutput(0, 0, smallestReading);
 
-    if (-0.5 <= (currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
+    if (abs(currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
        nextWallReading = HC_SR04_range();
     }
 
-    if (-0.5 <= (currentAngle - nextNextWallDeg) <= 0.5) { // Within +- 0.5 deg
+    if (abs(currentAngle - nextNextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
        nextNextWallReading = HC_SR04_range();
     }
 
@@ -246,7 +246,7 @@ void findCorner() {
         currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
       }
 
-      if (-0.5 <= (currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
+      if (abs(currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
        nextWallReading = HC_SR04_range();
       }
     }
@@ -256,8 +256,9 @@ void findCorner() {
 
     nextNextWallReading = HC_SR04_range();
   }
+
   // For debugging
-  serialOutput(0, 0, smallestReading);
+  serialOutput(0, 0, smallestReading); // Not sure why this outputs garbage
   serialOutput(0, 0, nextWallReading);
   serialOutput(0, 0, nextNextWallReading);
 
