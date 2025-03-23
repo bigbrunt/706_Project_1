@@ -12,13 +12,19 @@ class SensorFilter {
     float P_est; // Estimated error covariance
     float Q;     // Process noise covariance
     float R;     // Measurement noise covariance
+    float coefficent;
+    float exponent;
+    int pin_num;
 
   public:
-    SensorFilter(float processNoise, float measurementNoise, float initialEstimate = 0, float initialError = 1) {
+    SensorFilter(float processNoise, float measurementNoise, float initialEstimate, float initialError, float co, float exp, int pin) {
         Q = processNoise;
         R = measurementNoise;
         x_est = initialEstimate;
         P_est = initialError;
+        coefficent = co;
+        exponent = exp;
+        pin_num = pin;
     }
 
     float update(float raw_distance) {
@@ -33,6 +39,22 @@ class SensorFilter {
 
         return x_est;
     }
+
+    float read(){
+      int rawValue = analogRead(pin_num);
+    
+      float distance = coefficent * pow(rawValue, exponent);
+
+      if (distance < 4) distance = 4;
+      if (distance > 1000) distance = 1000;
+
+      // Apply Kalman filter
+      float filteredDistance = update(distance);
+      return filteredDistance;
+    }
+
+
+
 };
 
 #endif
