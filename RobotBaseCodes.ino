@@ -23,90 +23,6 @@
 #include <SoftwareSerial.h> // For wireless communication
 #include <Arduino.h>
 
-// Vector class stuff
-
-class Vector {
-private:
-    float* data;      // Pointer to dynamically allocated array
-    int capacity;     // Capacity of the array
-    int size;         // Current number of elements in the array
-
-public:
-    // Constructor to initialize vector with a given capacity
-    Vector(int initialCapacity = 1000) {
-        capacity = initialCapacity;
-        size = 0;
-        data = new float[capacity];  // Dynamically allocate memory for the array
-    }
-
-    // Destructor to free dynamically allocated memory
-    ~Vector() {
-        delete[] data;
-    }
-
-    // Function to add a value to the vector (ignores zeros)
-    void add(float value) {
-        if (size >= capacity) {
-            resize(capacity * 2);  // Resize array if it is full
-        }
-        data[size++] = value;  // Add the value and increment size
-    }
-
-
-
-    // Function to find the index of the smallest element
-    int getMinIndex() const {
-        if (size == 0) return -1;  // Handle empty vector
-        int minIndex = 0;
-        for (int i = 1; i < size; i++) {
-            if (data[i] < data[minIndex]) {
-                minIndex = i;
-            }
-        }
-        return minIndex;
-    }
-
-
-    // Function to get the current size of the vector
-    int getSize() const {
-        return size;
-    }
-
-private:
-    // Helper function to resize the array when full
-    void resize(int newCapacity) {
-        float* newData = new float[newCapacity];
-        for (int i = 0; i < size; i++) {
-            newData[i] = data[i];
-        }
-        delete[] data;  // Free the old array
-        data = newData;  // Assign new array to data pointer
-        capacity = newCapacity;  // Update capacity
-    }
-};
-//
-
-// Gyro stuff
-const int gyroPin = A3;
-int T = 100; // For 1 super loop
-int sensorValue = 0;
-float gyroSupplyVoltage = 5;
-float gyroZeroVoltage = 0; // Voltage when not rotating
-float gyroSensitivity = 0.007; // Taken from data sheets
-float rotationThreshold = 3; // For gyro drift correction
-float gyroRate = 0;
-float currentAngle = 0;
-// const float referenceVoltage = 5.0; // For Arduino
-// const int zeroRate = 512; // Half of 1023, implies no rotation (check this is calibrated)
-// float angle = 0; // Rotation from initial placement
-// unsigned long lastTime = 0; 
-// float rotationThreshold = 1.5; // For gyro drift
-//
-
-// Create an instance of the Vector class
-Vector sonarReadings;
-
-
 // Serial Data input pin
 #define BLUETOOTH_RX 10
 // Serial Data output pin
@@ -152,14 +68,25 @@ Servo right_rear_motor;  // create servo object to control Vex Motor Controller 
 Servo right_front_motor;  // create servo object to control Vex Motor Controller 29
 Servo turret_motor;
 
+// Kinematic Constants
 double lx = 0.0759; // x radius (m) (robot)
 double ly = 0.09; // y radius (m) (robot  )
 double rw = 0.0275; //wheel radius (m)
 
+// Control sys Arrays
 double speed_array[4][1]; // array of speed values for the motors
 double control_effort_array[3][1]; // array of xyz control efforts from pid controlers
+double ki_memory_array[3][1];
 
+// CONTROL GAIN VALUES
+double kp_x = 0.75;
+double kp_y = 0;
+double kp_z = 0;
+double ki_x = 0;
+double ki_y = 0;
+double ki_z = 0;
 
+// initial speed value (for serial movement control)
 int speed_val = 100;
 int speed_change;
 
@@ -192,52 +119,52 @@ class RingBuf {
     double exponent;            // exponent for ADC -> cm equation
     long sum = 0;                // Sum of the elements in the buffer (long for large sums)
 
-    public:
-      RingBuf(int p, double c, double e){
-        pin = p;
-        coefficent = c;
-        exponent = e;
-        pinMode(pin, OUTPUT);
+  public:
+    RingBuf(int p, double c, double e) {
+      pin = p;
+      coefficent = c;
+      exponent = e;
+      pinMode(pin, OUTPUT);
+    }
+    void intialise_buf() {
+      // Initialize the buffer with 0s (optional)
+      for (int i = 0; i < bufferSize; i++) {
+        buffer[i] = 0;
       }
-      void intialise_buf(){
-           // Initialize the buffer with 0s (optional)
-          for (int i = 0; i < bufferSize; i++) {
-            buffer[i] = 0;
-          }
-      }
+    }
 
-      void push() {
-        if (size == bufferSize) {
-          // If the buffer is full, subtract the oldest value from the sum
-          sum -= buffer[front];
-          front = (front + 1) % bufferSize; // Move the front pointer forward
-        } else {
-          size++;
-        }
-
-        // Add the new value to the buffer and update the sum
-        int value =  (int) coefficent * pow(analogRead(pin), exponent);
-        // int value = analogRead(pin);
-        buffer[rear] = value;  // Reading from analog pin;
-        sum += value;
-
-        // Move the rear pointer forward
-        rear = (rear + 1) % bufferSize;
+    void push() {
+      if (size == bufferSize) {
+        // If the buffer is full, subtract the oldest value from the sum
+        sum -= buffer[front];
+        front = (front + 1) % bufferSize; // Move the front pointer forward
+      } else {
+        size++;
       }
 
-      // Function to calculate the moving average
-      int32_t movingAverage() {
-        if (size == 0) {
-          return 0; // Avoid division by zero if the buffer is empty
-        }
-        return (int32_t)sum / size;
-      }
-    };
+      // Add the new value to the buffer and update the sum
+      int value =  (int) coefficent * pow(analogRead(pin), exponent);
+      // int value = analogRead(pin);
+      buffer[rear] = value;  // Reading from analog pin;
+      sum += value;
 
-RingBuf IR_Long1(21, 3536.6,-0.86);
-RingBuf IR_Long2(19, 5928.2,-1.062);
-RingBuf IR_Short1(20,27126,-1.038);
-RingBuf IR_Short2(18,2261.8,-0.981);
+      // Move the rear pointer forward
+      rear = (rear + 1) % bufferSize;
+    }
+
+    // Function to calculate the moving average
+    int32_t movingAverage() {
+      if (size == 0) {
+        return 0; // Avoid division by zero if the buffer is empty
+      }
+      return (int32_t)sum / size;
+    }
+};
+
+RingBuf IR_Long1(21, 3536.6, -0.86);
+RingBuf IR_Long2(19, 5928.2, -1.062);
+RingBuf IR_Short1(20, 27126, -1.038);
+RingBuf IR_Short2(18, 2261.8, -0.981);
 
 
 void setup(void) {
@@ -260,356 +187,14 @@ void setup(void) {
 
   //delay(1000);  //settling time but no really needed
 
-  // Gyro stuff
-  int i;
-  float sum = 0;
-  for (i=0; i<100; i++) {
-    sensorValue = analogRead(gyroPin);
-    sum += sensorValue;
-    delay(5);
-  }
-  gyroZeroVoltage = sum/100;
-  //
+  
 
-  // Needed to get the robot moving
-  left_front_motor.attach(left_front);
-  left_rear_motor.attach(left_rear);
-  right_front_motor.attach(right_front);
-  right_rear_motor.attach(right_rear);
-
-  findCorner(); // Need to define this function
 }
 
 void loop(void)  //main loop
 {
-  static STATE machine_state = INITIALISING;
-  //Finite-state machine Code
-  switch (machine_state) {
-    case INITIALISING:
-      machine_state = initialising();
-      break;
-    case RUNNING:  //Lipo Battery Volage OK
-      machine_state = running();
-      break;
-    case STOPPED:  //Stop of Lipo Battery voltage is too low, to protect Battery
-      machine_state = stopped();
-      break;
-  };
-//   Counter = Counter + 1;
-//  // if (Counter > 100000) {
-//     //GYRO_reading(); // Serial output gyro reading, not wireless at this stage
-//     //PIN_reading(A4); // Serial output IR sensor reading
-//     int32_t cm = (int32_t) HC_SR04_range();
-//     int distancec =  2712.6 * pow(analogRead(A4), -1.038);
-//     int newValue = analogRead(A4);  // Reading from analog pin A0 (can be replaced with any other input)
-  
-//    // Push the new value into the buffer
-//     push(newValue);
-//     //serialOutput(0, 0, PIN_get_reading(A4)); // Using counter as data index gives weird output
-//     serialOutput(0, 0, movingAverage());
-//     Counter = 0;
-//   //}
-
-  // Gyro stuff
-  // unsigned long currentTime = micros(); // Get current time (ms)
-  // float deltaTime = (currentTime - lastTime) / 1e6; // Convert to s
-  // lastTime = currentTime;
-
-  // int rawValue = analogRead(gyroPin);
-  // float voltage = (float)(rawValue / 1023.0) * referenceVoltage; // Convert to voltage
-  // float angularVelocity = (voltage - (zeroRate * referenceVoltage / 1023)) / sensitivity;
-
-  // if ((angularVelocity >= rotationThreshold) || (angularVelocity <= -rotationThreshold)) {
-  //   angle += angularVelocity * deltaTime; // Equivalent to integrating
-  // }
-
-  // // Always running this code to keep track of orientation
-  // gyroRate = (analogRead(gyroPin)*gyroSupplyVoltage)/1023; // Convert to voltage
-  // gyroRate -= (gyroZeroVoltage/1023*gyroSupplyVoltage); // Gyro drift?
-  // float angularVelocity = gyroRate/gyroSensitivity; // From data sheet
-
-  // if (angularVelocity >= rotationThreshold || angularVelocity <= -rotationThreshold) {
-  //   float angleChange = angularVelocity/(1000/T);
-  //   currentAngle += angleChange;
-  // }
-
-  // serialOutput(0, 0, currentAngle); // Output wirelessly
-  //delay(T);
-  // rotateDeg(360);
-
-  // gyroRate = (analogRead(gyroPin)*gyroSupplyVoltage)/1023; // Convert to voltage
-  // gyroRate -= (gyroZeroVoltage/1023*gyroSupplyVoltage); // Gyro drift?
-  // float angularVelocity = gyroRate/gyroSensitivity; // From data sheet
-
-  // if (angularVelocity >= rotationThreshold || angularVelocity <= -rotationThreshold) {
-  //   float angleChange = angularVelocity/(1000/T);
-  //   currentAngle += angleChange;
-  // }
-
-  // serialOutput(0, 0, currentAngle); // Output wirelessly
-  // delay(T);
-  //
-
-  // goToWall();
-
-    // IR_Long1.push(); // Push the new value into the buffer
-    // IR_Long2.push(); // Push the new value into the buffer
-    // IR_Short1.push(); // Push the new value into the buffer
-    // IR_Short2.push(); // Push the new value into the buffer
-
-    // int32_t long1val = IR_Long1.movingAverage();
-    // int32_t long2val = IR_Long2.movingAverage();
-    // int32_t short1val = IR_Short1.movingAverage();
-    // int32_t short2val = IR_Short2.movingAverage();
-    
-    // serialOutput(0, 0, long1val); // print ir value
-}
-
-
-// void findCorner() {
-//   // Rotate 360 deg and take sensore readings when avaiable
-//   // Store in a vector or something, need to consider cross talk (unless using sonar only)
-
-//   // For some reason needs to be rotated to start moving (goes into running state)
-
-//   while (currentAngle < 360) {
-//     // rotate cw
-//     // Add motor driving code
-//     serialOutput(0, 0, currentAngle);
-//     left_front_motor.writeMicroseconds(1500 + speed_val);
-//     left_rear_motor.writeMicroseconds(1500 + speed_val);
-//     right_front_motor.writeMicroseconds(1500 + speed_val);
-//     right_rear_motor.writeMicroseconds(1500 + speed_val);
-
-//     // Update angle
-//     gyroRate = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023;  // Convert to voltage
-//     gyroRate -= (gyroZeroVoltage / 1023 * gyroSupplyVoltage);     // Gyro drift?
-//     float angularVelocity = gyroRate / gyroSensitivity;           // From data sheet
-
-//     if (angularVelocity >= rotationThreshold || angularVelocity <= -rotationThreshold) {
-//       float angleChange = angularVelocity / (1000 / T);
-//       currentAngle += angleChange;
-//     }
-
-//     // Check for sonar reading
-//     // if (sonar gives reading) {
-//     //   put reading in sonar vector
-//     // }
-//   }
-//   // After 360, stop motors
-//   stop();
-//   // Add code that calculates wall lengths and finds the closest corner
-// }
-
-void findCorner() {
-  // Ensure initial angle is reset
-  currentAngle = 0;
-
-  float currentReading = 300;
-  float smallestReading = 300;
-  float smallestReadingDeg = 0;
-
-  unsigned long lastTime = micros();  // Record the starting time
-
-  // // Sorting out sonar readings
-  // left_front_motor.writeMicroseconds(1500 + speed_val);
-  // left_rear_motor.writeMicroseconds(1500 + speed_val);
-  // right_front_motor.writeMicroseconds(1500 + speed_val);
-  // right_rear_motor.writeMicroseconds(1500 + speed_val);
-
-  // while (1) {
-  //   serialOutput(0, 0, HC_SR04_range());
-  //   // float value =  (float) 3536.6 * pow(analogRead(A7), -0.86); // Hopefully this calculates LR1 sensor distance
-  //   // serialOutput(0, 0, value); // Sensor L1
-  //   delay(1000);  
-  // }
-  
-  while (currentAngle < 360) {
-    // Rotate clockwise (adjust speed_val as needed) // Move this out of loop?
-    left_front_motor.writeMicroseconds(1500 + speed_val);
-    left_rear_motor.writeMicroseconds(1500 + speed_val);
-    right_front_motor.writeMicroseconds(1500 + speed_val);
-    right_rear_motor.writeMicroseconds(1500 + speed_val);
-
-    // // Update smallest reading
-    // currentReading = HC_SR04_range();
-    // if (currentReading < smallestReading) { // Order works? Not bad for gyro drift?
-    //   smallestReading = currentReading;
-    //   smallestReadingDeg = currentAngle;
-    // }
-
-    // Time calculation (in seconds)
-    unsigned long currentTime = micros();
-    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-    lastTime = currentTime;
-
-    // Read gyro and calculate angular velocity
-    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-    // Update angle (integrate angular velocity)
-    if (abs(angularVelocity) > rotationThreshold) {
-      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-    }
-
-    // Debugging output
-    // serialOutput(0, 0, currentAngle);
-
-    // Take sonar readings
-    // Takes too many
-    // serialOutput(0, 0, HC_SR04_range()); // Test what this function outputs
-    sonarReadings.add(HC_SR04_range());
-   
-  }
-
-  stop(); // Doesnt seem to stop wheels, doesent really matter
-
-  // Find closest wall
-  int minIndex = sonarReadings.getMinIndex();
-  int size = sonarReadings.getSize();
-  float degPerReading = 360/size;
-  float degClosestWall = degPerReading * minIndex;
-
-
-  // Rotate to closest wall
-  currentAngle = 0;
-
-  lastTime = micros();
-  
-  while (currentAngle < degClosestWall) {
-    // Rotate clockwise (adjust speed_val as needed)
-    left_front_motor.writeMicroseconds(1500 + speed_val);
-    left_rear_motor.writeMicroseconds(1500 + speed_val);
-    right_front_motor.writeMicroseconds(1500 + speed_val);
-    right_rear_motor.writeMicroseconds(1500 + speed_val);
-
-    // Time calculation (in seconds)
-    unsigned long currentTime = micros();
-    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-    lastTime = currentTime;
-
-    // Read gyro and calculate angular velocity
-    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-    // Update angle (integrate angular velocity)
-    if (abs(angularVelocity) > rotationThreshold) {
-      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-    }
-  }
-  // Stop motors after completing 360° rotation
-  stop();
-}
-
-
-
-void push(int value) {
-  if (size == bufferSize) {
-    // If the buffer is full, subtract the oldest value from the sum
-    sum -= buffer[front];
-    front = (front + 1) % bufferSize; // Move the front pointer forward
-  } else {
-    size++;
-  }
-
-  // Add the new value to the buffer and update the sum
-  buffer[rear] = value;
-  sum += value;
-
-  // Move the rear pointer forward
-  rear = (rear + 1) % bufferSize;
-}
-
-// Function to calculate the moving average
-int32_t movingAverage() {
-  if (size == 0) {
-    return 0; // Avoid division by zero if the buffer is empty
-  }
-  return (int32_t)sum / size;
-}
-
-STATE initialising() {
-  //initialising
-  SerialCom->println("INITIALISING....");
-  delay(1000);  //One second delay to see the serial string "INITIALISING...."
-  SerialCom->println("Enabling Motors...");
   enable_motors();
-  SerialCom->println("RUNNING STATE...");
-  return RUNNING;
-}
-
-STATE running() {
-
-  static unsigned long previous_millis;
-
-  read_serial_command();
-  fast_flash_double_LED_builtin();
-
-  if (millis() - previous_millis > 500) {  //Arduino style 500ms timed execution statement
-    previous_millis = millis();
-
-    SerialCom->println("RUNNING---------");
-    speed_change_smooth();
-    Analog_Range_A4();
-
-#ifndef NO_READ_GYRO
-    GYRO_reading();
-#endif
-
-#ifndef NO_HC - SR04
-    HC_SR04_range();
-#endif
-
-#ifndef NO_BATTERY_V_OK
-    if (!is_battery_voltage_OK()) return STOPPED;
-#endif
-
-
-    turret_motor.write(pos);
-
-    if (pos == 0) {
-      pos = 45;
-    } else {
-      pos = 0;
-    }
-  }
-
-  return RUNNING;
-}
-
-//Stop of Lipo Battery voltage is too low, to protect Battery
-STATE stopped() {
-  static byte counter_lipo_voltage_ok;
-  static unsigned long previous_millis;
-  int Lipo_level_cal;
-  disable_motors();
-  slow_flash_LED_builtin();
-
-  if (millis() - previous_millis > 500) {  //print massage every 500ms
-    previous_millis = millis();
-    SerialCom->println("STOPPED---------");
-
-
-#ifndef NO_BATTERY_V_OK
-    //500ms timed if statement to check lipo and output speed settings
-    if (is_battery_voltage_OK()) {
-      SerialCom->print("Lipo OK waiting of voltage Counter 10 < ");
-      SerialCom->println(counter_lipo_voltage_ok);
-      counter_lipo_voltage_ok++;
-      if (counter_lipo_voltage_ok > 10) {  //Making sure lipo voltage is stable
-        counter_lipo_voltage_ok = 0;
-        enable_motors();
-        SerialCom->println("Lipo OK returning to RUN STATE");
-        return RUNNING;
-      }
-    } else {
-      counter_lipo_voltage_ok = 0;
-    }
-#endif
-  }
-  return STOPPED;
+  goToWall();
 }
 
 void fast_flash_double_LED_builtin() {
@@ -636,6 +221,7 @@ void slow_flash_LED_builtin() {
   }
 }
 
+//for serial speed control
 void speed_change_smooth() {
   speed_val += speed_change;
   if (speed_val > 1000)
@@ -739,9 +325,9 @@ float HC_SR04_range() {
   if (pulse_width > MAX_DIST) {
     SerialCom->println("HC-SR04: Out of range");
   } else {
-    SerialCom->print("HC-SR04:");
-    SerialCom->print(cm);
-    SerialCom->println("cm");
+    //    SerialCom->print("HC-SR04:");
+    //    SerialCom->print(cm);
+    //    SerialCom->println("cm");
     return cm;
   }
 }
@@ -759,109 +345,62 @@ void GYRO_reading() {
 }
 #endif
 
-//Serial command pasing
-void read_serial_command() {
-  if (SerialCom->available()) {
-    char val = SerialCom->read();
-    SerialCom->print("Speed:");
-    SerialCom->print(speed_val);
-    SerialCom->print(" ms ");
 
-    //Perform an action depending on the command
-    switch (val) {
-      case 'w':  //Move Forward
-      case 'W':
-        forward();
-        SerialCom->println("Forward");
-        break;
-      case 's':  //Move Backwards
-      case 'S':
-        reverse();
-        SerialCom->println("Backwards");
-        break;
-      case 'a':  //Strafe Left
-      case 'A':
-        strafe_left();
-        SerialCom->println("Strafe Left");
-        break;
-      case 'd':  //Strafe Right
-      case 'D':
-        strafe_right();
-        SerialCom->println("Strafe Right");
-        break;
-      case 'q':  //Turn Left
-      case 'Q':
-        ccw();
-        SerialCom->println("ccw");
-        break;
-      case 'e':  //Turn Right
-      case 'E':
-        cw();
-        SerialCom->println("cw");
-        break;
-      case '-':  // - speed
-      case '_':
-        speed_change = -100;
-        SerialCom->println("-100");
-        break;
-      case '=':
-      case '+': // + speed
-        speed_change = 100;
-        SerialCom->println("+");
-        break;
-      case 'x':
-      case 'X':
-        stop();
-        SerialCom->println("stop");
-        break;
-      case 'r':
-      case 'R':
-        goToWall();
-        // bluetoothSerial.print("Go To Wall");
-        break;
-      default:
-        stop();
-        SerialCom->println("stop");
-        break;
-    }
-  }
-}
+void goToWall() {
 
-
-void calcSpeed(){
-speed_array[1][1] = (int) (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
-speed_array[2][1] = (int) (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
-speed_array[3][1] = (int) (1/rw) * (control_effort_array[1][1] - control_effort_array[2][1] + (lx+ly) * control_effort_array[3][1]);
-speed_array[4][1] = (int) (1/rw) * (control_effort_array[1][1] + control_effort_array[2][1] - (lx+ly) * control_effort_array[3][1]);
-
-}
-
-void control(){
-  control_effort_array[1][1] = 10; // x
-  control_effort_array[2][1] = 0; // y
-  control_effort_array[3][1] = 0; // z
-
-  
-
-}
-
-void goToWall(){
- 
-  while(HC_SR04_range() > 10){
-    control_effort_array[1][1] = 10;
+  while (1) {
+    control(1, 0, 0);
     calcSpeed();
     move();
-    SerialCom->println(control_effort_array[2][1]);
+    delay(1000);
   }
-  stop();
-  
+
+
 }
 
+
+void control(bool toggle_x, bool toggle_y, bool toggle_z) {
+  control_effort_array[0][0] = (toggle_x)
+                               ? HC_SR04_range() * kp_x + ki_memory_array[0][0] * ki_x
+                               : 0;
+  control_effort_array[1][0] = (toggle_y)
+                               ? 0
+                               : 0;
+  control_effort_array[2][0] = (toggle_x)
+                               ? 0
+                               : 0;
+
+  ki_memory_array[0][0] += control_effort_array[0][0];
+  ki_memory_array[1][0] += control_effort_array[1][0];
+  ki_memory_array[2][0] += control_effort_array[2][0];
+
+  //  Serial.println(HC_SR04_range());
+  //  Serial.println(control_effort_array[1][1]);
+}
+
+void calcSpeed() {
+  speed_array[0][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -100, 100);
+  speed_array[1][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -100, 100);
+  speed_array[2][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -100, 100);
+  speed_array[3][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -100, 100);
+  Serial.print(speed_array[0][0]);
+  Serial.print(speed_array[1][0]);
+  Serial.print(speed_array[2][0]);
+  Serial.print(speed_array[3][0]);
+  Serial.println(".");
+
+}
+
+
 void move() {
-  left_front_motor.writeMicroseconds(1500 + speed_array[1][1]);
-  left_rear_motor.writeMicroseconds(1500 + speed_array[4][1]);
-  right_rear_motor.writeMicroseconds(1500 - speed_array[3][1]);
-  right_front_motor.writeMicroseconds(1500 - speed_array[2][1]);
+//  left_front_motor.writeMicroseconds(1500 + speed_array[0][0]);
+//  left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
+//  right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
+//  right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
+  left_front_motor.writeMicroseconds(1500 + 100);
+  left_rear_motor.writeMicroseconds(1500 + 100);
+  right_rear_motor.writeMicroseconds(1500 - 100);
+  right_front_motor.writeMicroseconds(1500 - 100);
 }
 
 
