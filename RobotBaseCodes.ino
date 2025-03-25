@@ -183,6 +183,10 @@ void loop(void)  //main loop
 //   }
 // }
 
+float toCm(float reading) { // NEED TO COMPLETE THIS CODE
+  int value = (int)(coefficent * pow(analogRead(pin), exponent));
+  return value;
+}
 
 void turnTo(float currentAngle, float desiredAngle) { 
   unsigned long lastTime = micros();  // Record the starting time
@@ -356,28 +360,65 @@ void findCorner() {
   // serialOutput(0, 0, c);
   // serialOutput(0, 0, d);
 
-  // NEED TO ADD FUNCTIONALITY (AND CHECK LOGIC)
+  // NEED TO ADD FUNCTIONALITY (AND CHECK LOGIC) AND MAKE MORE MODULAR
   if (minh == h1) {
     // a and c constitute closest wall
     if (aShort) {
       // Turn to face a (smallest deg)
       turnTo(currentAngle, smallestDeg);
+      delay(1000); // For now
+
       // Drive forward by c, then strafe by a
+      forward();
+      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
+        // Do nothing
+      }
+      stop();
+
+      // Strafing code here, need to determine if right or left faster
+      strafe_right();
+      float reading = toCm(analogRead(pin));  // UPDATE THIS
+      while ( reading > 3) { // CHECK HOW CLOSE WE WANT IT
+        reading = toCm(analogRead(pin));
+      }
+      stop();
+
     } else {
       // Turn to face c
       turnTo(currentAngle, wall1Deg);
+      delay(1000); // For now
+
       // Drive forward by a, then strafe by c
+      forward();
+      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
+        // Do nothing
+      }
+      stop();
     }
   } else {
     // a and d constitute closest wall
     if (aShort) {
       // Turn to face a (smallest deg)
       turnTo(currentAngle, smallestDeg);
+      delay(1000); // For now
+
       // Drive forward by d, then strafe by a
+      forward();
+      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
+        // Do nothing
+      }
+      stop();
     } else {
       // Turn to face d
       turnTo(currentAngle, wall3Deg);
+      delay(1000); // For now
+
       // Drive forward by a, then strafe by d
+      forward();
+      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
+        // Do nothing
+      }
+      stop();
     }
   }
 }
