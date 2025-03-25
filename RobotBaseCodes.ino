@@ -183,8 +183,8 @@ void loop(void)  //main loop
 //   }
 // }
 
-float toCm(float reading) { // NEED TO COMPLETE THIS CODE
-  int value = (int)(coefficent * pow(analogRead(pin), exponent));
+float toCm(int pin, float coeff, float exp) {
+  int value = (int)(coeff * pow(analogRead(pin), exp));
   return value;
 }
 
@@ -228,7 +228,6 @@ void turnTo(float currentAngle, float desiredAngle) {
   }
   stop();  // Stop the motors when the desired angle is reached
 }
-
 
 void findCorner() {
   currentAngle = 0; // Initial angle zero deg
@@ -364,36 +363,51 @@ void findCorner() {
   if (minh == h1) {
     // a and c constitute closest wall
     if (aShort) {
+      // Drive to a, strafe right
       // Turn to face a (smallest deg)
       turnTo(currentAngle, smallestDeg);
       delay(1000); // For now
 
-      // Drive forward by c, then strafe by a
       forward();
-      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
+      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT, MAKE SURE WE ARE FACING WALL
         // Do nothing
+        delayMicroseconds(3500); // Not sure if delays needed
       }
       stop();
+      delay(1000); // For now
 
-      // Strafing code here, need to determine if right or left faster
+      int pin = 20;
+      float coeff = 27126;
+      float exp = -1.038;
       strafe_right();
-      float reading = toCm(analogRead(pin));  // UPDATE THIS
-      while ( reading > 3) { // CHECK HOW CLOSE WE WANT IT
-        reading = toCm(analogRead(pin));
+      float reading = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
+      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
+        reading = toCm(pin, coeff, exp);
+        delayMicroseconds(3500); // Not sure if delays needed
       }
-      stop();
-
+      stop(); // Can move this to end of section
     } else {
-      // Turn to face c
+      // Drive to c, strafe left
       turnTo(currentAngle, wall1Deg);
       delay(1000); // For now
 
-      // Drive forward by a, then strafe by c
       forward();
       while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
         // Do nothing
+        delayMicroseconds(3500);
       }
       stop();
+      delay(1000); // For now
+
+      int pin = 18;
+      float coeff = 2261.8;
+      float exp = -0.981;
+      strafe_left();
+      float reading = toCm(pin, coeff, exp); 
+      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
+        reading = toCm(pin, coeff, exp);
+        delayMicroseconds(3500);
+      }
     }
   } else {
     // a and d constitute closest wall
@@ -406,8 +420,22 @@ void findCorner() {
       forward();
       while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
         // Do nothing
+        delayMicroseconds(3500);
       }
       stop();
+      delay(1000); // For now
+
+      int pin = 18;
+      float coeff = 2261.8;
+      float exp = -0.981;
+      strafe_left();
+      float reading = toCm(pin, coeff, exp); 
+      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
+        reading = toCm(pin, coeff, exp);
+        delayMicroseconds(3500);
+      }
+      stop();
+
     } else {
       // Turn to face d
       turnTo(currentAngle, wall3Deg);
@@ -417,8 +445,20 @@ void findCorner() {
       forward();
       while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
         // Do nothing
+        delayMicroseconds(3500);
       }
       stop();
+
+      int pin = 20;
+      float coeff = 27126;
+      float exp = -1.038;
+      strafe_right();
+      float reading = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
+      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
+        reading = toCm(pin, coeff, exp);
+        delayMicroseconds(3500);
+      }
+      stop(); // Can move this to end of section
     }
   }
 }
