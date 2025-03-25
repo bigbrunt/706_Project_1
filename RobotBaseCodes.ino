@@ -184,33 +184,46 @@ void loop(void)  //main loop
 // }
 
 
-// void turnTo(float currentAngle, float desiredAngle, unsigned long &lastTime) { 
+void turnTo(float currentAngle, float desiredAngle) { 
+  unsigned long lastTime = micros();  // Record the starting time
+  float angleDifference = desiredAngle - currentAngle;
 
-//   float angleDifference = desiredAngle - currentAngle;
+  // Normalize the angle difference to be within -180 to 180 degrees
+  if (angleDifference > 180) {
+    angleDifference -= 360;
+  } else if (angleDifference < -180) {
+    angleDifference += 360;
+  }
 
-//   // Normalize the angle difference to be within -180 to 180 degrees
-//   if (angleDifference > 180) {
-//     angleDifference -= 360;
-//   } else if (angleDifference < -180) {
-//     angleDifference += 360;
-//   }
+  // If the angle difference is positive, rotate clockwise (cw)
+  // If the angle difference is negative, rotate counterclockwise (acw)
+  if (angleDifference > 0) {
+    cw();  // Rotate clockwise
+  } else {
+    ccw();  // Rotate counterclockwise
+  }
 
-//   // If the angle difference is positive, rotate clockwise (cw)
-//   // If the angle difference is negative, rotate counterclockwise (acw)
-//   if (angleDifference > 0) {
-//     cw();  // Rotate clockwise
-//   } else {
-//     ccw();  // Rotate counterclockwise
-//   }
+  // Rotate until the current angle is close enough to the desired angle
+  while (abs(currentAngle - desiredAngle) > 0.5) {
+    delayMicroseconds(3500);
 
-//   // Rotate until the current angle is close enough to the desired angle
-//   while (abs(currentAngle - desiredAngle) > 0.5) {
-//     updateAngle(lastTime);  // Update the current angle using the gyro
-//     delayMicroseconds(3500);  // Allow sensors to stabilize and prevent rapid movements
-//   }
+    // Time calculation (in seconds)
+    unsigned long currentTime = micros();
+    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+    lastTime = currentTime;
 
-//   stop();  // Stop the motors when the desired angle is reached
-// }
+    // Read gyro and calculate angular velocity
+    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+
+    // Update angle (integrate angular velocity)
+    if (abs(angularVelocity) > rotationThreshold) {
+      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+    } 
+  }
+  stop();  // Stop the motors when the desired angle is reached
+}
 
 
 void findCorner() {
@@ -311,6 +324,12 @@ void findCorner() {
     currentAngle = -smallestDeg;
   }
 
+  // Update degs
+  smallestDeg = 0;
+  wall1Deg = 90;
+  wall2Deg = 180;
+  float wall3Deg = 270;
+
   // Find closest corner
   float a = smallestReading; // DO I NEED TO CONSIDER ROBOT SIZE?
   float b = wall2Reading; // Opposite a
@@ -330,33 +349,37 @@ void findCorner() {
   float h2 = sqrt(pow(a, 2) + pow(d, 2));
   float minh = min(h1, h2); // Closest
 
-  // For now
-  serialOutput(0, 0, minh);
-  serialOutput(0, 0, a);
-  serialOutput(0, 0, b);
-  serialOutput(0, 0, c);
-  serialOutput(0, 0, d);
-  stop();
+  // // Debugging
+  // serialOutput(0, 0, minh);
+  // serialOutput(0, 0, a);
+  // serialOutput(0, 0, b);
+  // serialOutput(0, 0, c);
+  // serialOutput(0, 0, d);
 
-  // if (minh == h1) {
-  //   // a and c constitute closest wall
-  //   if (aShort) {
-  //     // Turn to face a (smallest deg)
-  //     // Drive forward by c, then strafe by a
-  //   } else {
-  //     // Turn to face c
-  //     // Drive forward by a, then strafe by c
-  //   }
-  // } else {
-  //   // a and d constitute closest wall
-  //   if (aShort) {
-  //     // Turn to face a (smallest deg)
-  //     // Drive forward by d, then strafe by a
-  //   } else {
-  //     // Turn to face d
-  //     // Drive forward by a, then strafe by d
-  //   }
-  // }
+  // NEED TO ADD FUNCTIONALITY (AND CHECK LOGIC)
+  if (minh == h1) {
+    // a and c constitute closest wall
+    if (aShort) {
+      // Turn to face a (smallest deg)
+      turnTo(currentAngle, smallestDeg);
+      // Drive forward by c, then strafe by a
+    } else {
+      // Turn to face c
+      turnTo(currentAngle, wall1Deg);
+      // Drive forward by a, then strafe by c
+    }
+  } else {
+    // a and d constitute closest wall
+    if (aShort) {
+      // Turn to face a (smallest deg)
+      turnTo(currentAngle, smallestDeg);
+      // Drive forward by d, then strafe by a
+    } else {
+      // Turn to face d
+      turnTo(currentAngle, wall3Deg);
+      // Drive forward by a, then strafe by d
+    }
+  }
 }
 
 STATE initialising() {
