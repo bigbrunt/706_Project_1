@@ -159,232 +159,204 @@ void loop(void)  //main loop
   };
 }
 
-void updateAngle(unsigned long &lastTime) {
-  // Get the current time in microseconds
-  unsigned long currentTime = micros();
+// void updateAngle(unsigned long &lastTime) {
+//   // Get the current time in microseconds
+//   unsigned long currentTime = micros();
   
-  // Calculate the time elapsed since the last update (in seconds)
-  float deltaTime = (currentTime - lastTime) / 1e6;  // Convert microseconds to seconds
-  lastTime = currentTime;  // Update the last time to current time
+//   // Calculate the time elapsed since the last update (in seconds)
+//   float deltaTime = (currentTime - lastTime) / 1e6;  // Convert microseconds to seconds
+//   lastTime = currentTime;  // Update the last time to current time
 
-  // Read the gyro voltage from the analog pin
-  float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+//   // Read the gyro voltage from the analog pin
+//   float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
   
-  // Calculate the angular rate (gyro rate) from the voltage
-  float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+//   // Calculate the angular rate (gyro rate) from the voltage
+//   float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
   
-  // Convert the gyro rate to angular velocity (°/s)
-  float angularVelocity = gyroRate / gyroSensitivity;
+//   // Convert the gyro rate to angular velocity (°/s)
+//   float angularVelocity = gyroRate / gyroSensitivity;
 
-  // If the angular velocity is above the threshold, update the current angle
-  if (abs(angularVelocity) > rotationThreshold) {
-    currentAngle += angularVelocity * deltaTime;  // Integrate angular velocity over time to get the angle
-    delayMicroseconds(3500);
-  }
-}
+//   // If the angular velocity is above the threshold, update the current angle
+//   if (abs(angularVelocity) > rotationThreshold) {
+//     currentAngle += angularVelocity * deltaTime;  // Integrate angular velocity over time to get the angle
+//     delayMicroseconds(3500);
+//   }
+// }
 
 
-void turnTo(float currentAngle, float desiredAngle) { 
+// void turnTo(float currentAngle, float desiredAngle, unsigned long &lastTime) { 
 
-  float angleDifference = desiredAngle - currentAngle;
+//   float angleDifference = desiredAngle - currentAngle;
 
-  // Normalize the angle difference to be within -180 to 180 degrees
-  if (angleDifference > 180) {
-    angleDifference -= 360;
-  } else if (angleDifference < -180) {
-    angleDifference += 360;
-  }
+//   // Normalize the angle difference to be within -180 to 180 degrees
+//   if (angleDifference > 180) {
+//     angleDifference -= 360;
+//   } else if (angleDifference < -180) {
+//     angleDifference += 360;
+//   }
 
-  // If the angle difference is positive, rotate clockwise (cw)
-  // If the angle difference is negative, rotate counterclockwise (acw)
-  if (angleDifference > 0) {
-    cw();  // Rotate clockwise
-  } else {
-    acw();  // Rotate counterclockwise
-  }
+//   // If the angle difference is positive, rotate clockwise (cw)
+//   // If the angle difference is negative, rotate counterclockwise (acw)
+//   if (angleDifference > 0) {
+//     cw();  // Rotate clockwise
+//   } else {
+//     ccw();  // Rotate counterclockwise
+//   }
 
-  // Rotate until the current angle is close enough to the desired angle
-  while (abs(currentAngle - desiredAngle) > 0.5) {
-    updateAngle(lastTime);  // Update the current angle using the gyro
-    delayMicroseconds(3500);  // Allow sensors to stabilize and prevent rapid movements
-  }
+//   // Rotate until the current angle is close enough to the desired angle
+//   while (abs(currentAngle - desiredAngle) > 0.5) {
+//     updateAngle(lastTime);  // Update the current angle using the gyro
+//     delayMicroseconds(3500);  // Allow sensors to stabilize and prevent rapid movements
+//   }
 
-  stop();  // Stop the motors when the desired angle is reached
-}
+//   stop();  // Stop the motors when the desired angle is reached
+// }
 
 
 void findCorner() {
-  // Ensure initial angle is reset
-  currentAngle = 0;
+  currentAngle = 0; // Initial angle zero deg
   unsigned long lastTime = micros();  // Record the starting time
 
-  // To find closest wall and next 2
+  // To find closest wall and next two walls
   float currentReading = 300;
   float smallestReading = 300;
-  float smallestReadingDeg = 0;
-  float nextWallDeg = 90; // smallestReadingDeg + 90 
-  float nextNextWallDeg = 180; // nextWallDeg + 90
-  float nextWallReading = 300;
-  float nextNextWallReading = 300;
-  float wall4Deg = 0;
+  float smallestDeg = 0;
+  float wall1Deg = 90; // Right angle to smallest 
+  float wall2Deg = 180; // Behind smallest
+  float wall1Reading = 300;
+  float wall2Reading = 300;
+  bool aShort = 1; // True if 'a' is shortest wall (diagram in notes)
+  bool loop2 = 0; // True if we go into second while loop (base angle 180 deg)
 
-  bool away = 0; // True if we are facing away from the closest wall
-
-  // Rotate clockwise (adjust speed_val as needed) // Moved this out of loop
-  cw();
+  cw(); // Rotate cw
 
   while (currentAngle < 360) {
-    // Find closest wall
+    delayMicroseconds(3500); // Time (ish) of serialOutput (seems to work)
+
     currentReading = HC_SR04_range();
 
     if (currentReading < smallestReading && currentReading > 0) { // Only consider valid readings 
       smallestReading = currentReading;
-      smallestReadingDeg = currentAngle;
-      nextWallDeg = smallestReadingDeg + 90;
-      nextNextWallDeg = nextWallDeg + 90;
+      smallestDeg = currentAngle;
+      wall1Deg = smallestDeg + 90;
+      wall2Deg = smallestDeg + 180;
     }
 
-    delayMicroseconds(3500); 
-
-    if (abs(currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
-       nextWallReading = HC_SR04_range();
-       delayMicroseconds(3500); 
+    if (abs(currentAngle - wall1Deg) <= 0.5) { // Can probably reduce this
+       wall1Reading = HC_SR04_range(); 
     }
 
-    if (abs(currentAngle - nextNextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed) // THIS APPEARS TO BE BUGGED
-       nextNextWallReading = HC_SR04_range();
-       delayMicroseconds(3500); 
+    if (abs(currentAngle - wall2Deg) <= 0.5) {
+       wall2Reading = HC_SR04_range();
+       delayMicroseconds(3500); // This only works with a delay
     }
 
-    updateAngle(lastTime);   
+    // Time calculation (in seconds)
+    unsigned long currentTime = micros();
+    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+    lastTime = currentTime;
+
+    // Read gyro and calculate angular velocity
+    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+
+    // Update angle (integrate angular velocity)
+    if (abs(angularVelocity) > rotationThreshold) {
+      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+    } 
   }
 
   stop();
-  currentAngle = 0; // Back to beginning
-  delay(1000); // Remove for final version
+  delay(1000); // Remove for final version (save time)
 
-  // Check that smallest wall and next wall match
-  if (smallestReadingDeg > 180) { // The reading wont match up
-    // Rotate clockwise (adjust speed_val as needed) // Add code for acw if faster
+  // Check that wall1, wall2 readings correct
+  if (smallestDeg > 180) { // The reading wont match up
     cw();
 
-    while (currentAngle < (smallestReadingDeg + 180)) { // Need to make this design more modular
-      // Keep spinning and updating
+    while (currentAngle < (smallestDeg + 180)) {
+      delayMicroseconds(3500);
 
-      updateAngle(lastTime);
+      // Time calculation (in seconds)
+      unsigned long currentTime = micros();
+      float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+      lastTime = currentTime;
 
-      if (abs(currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
-       nextWallReading = HC_SR04_range();
-       delayMicroseconds(3500); 
+      // Read gyro and calculate angular velocity
+      float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+      float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+      float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+
+      // Update angle (integrate angular velocity)
+      if (abs(angularVelocity) > rotationThreshold) {
+        currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+      } 
+
+      if (abs(currentAngle - wall1Deg) <= 0.5) { // Can probably reduce this
+        wall1Reading = HC_SR04_range();
       }
     }
+
+    wall2Reading = HC_SR04_range();
 
     stop();
-    currentAngle = 180;
-    delay(1000);
+    delay(1000); // Remove eventually
 
-    nextNextWallReading = HC_SR04_range();
+    currentAngle = 180; // Relative to closest wall
+    loop2 = 1;
   }
 
-  // // For debugging
-  // serialOutput(0, 0, smallestReading); // Not sure why this outputs garbage
-  // serialOutput(0, 0, nextWallReading);
-  // serialOutput(0, 0, nextNextWallReading);
-
-  // MAP SPECIFIC WALLS?
+  // Base angle (zero deg) chosen to be facing the smallest wall
+  if (!loop2) {
+    currentAngle = -smallestDeg;
+  }
 
   // Find closest corner
-  float a = smallestReading + 10; // CHECK THE 10, ESTIMATE
-  float b = nextWallReading + 10;
-  float c = nextNextWallReading + 10;
+  float a = smallestReading; // DO I NEED TO CONSIDER ROBOT SIZE?
+  float b = wall2Reading; // Opposite a
+  float c = wall1Reading;
   float d;
   
-  if ((a + c) > 140) { // Solid margin of error
+  if ((a + b) > 140) { // Solid margin of error
     // They constitute the long side
-    d = 120 - b + 10; // Check these values (120)
+    d = 100 - c; // Check these values and where on robot measuring from
   } else {
-    d = 200 - b + 10;
+    d = 180 - c;
+    aShort = 0; // Pointing at a is pointing at a long wall
   }
 
-  if ((a + c) > 140) {
-    // They make long wall, face a
-  } else {
-    float toFace = min(b, d); // Length of the wall we will face
-  }
+  // Calculate both hypotenuses (must use closest wall)
+  float h1 = sqrt(pow(a, 2) + pow(c, 2));
+  float h2 = sqrt(pow(a, 2) + pow(d, 2));
+  float minh = min(h1, h2); // Closest
 
-  // // Calc 2 hypotenuses (must use closest wall)
-  // float h1 = sqrt(pow(a, 2) + pow(b, 2));
-  // float h2 = sqrt(pow(a, 2) + pow(d, 2));
-
-  // float minh = min(h1, h2);
-
-  // // For debugging
-  // serialOutput(0, 0, minh);
-  // // serialOutput(0, 0, currentAngle);
-
-
-  // Changing logic to face closest short wall
-
-  // Havent been accounting for the size of the car
-  if (minh == h1) {
-    
-    float theta = atan(b/a) * 180.0 / 3.14159; // CONVERT TO DEG
-
-    
-
-    cw();
-
-    while (currentAngle < (360 + smallestReadingDeg + theta)) { // Need to make this design more modular
-      // Keep spinning and updating
-
-      // // For debugging
-      // serialOutput(0, 0, currentAngle);
-
-      // Time calculation (in seconds)
-      unsigned long currentTime = micros();
-      float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-      lastTime = currentTime;
-
-      // Read gyro and calculate angular velocity
-      float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-      float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-      float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-      // Update angle (integrate angular velocity)
-      if (abs(angularVelocity) > rotationThreshold) {
-        currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-        delayMicroseconds(3500);
-      }
-    }
-  } else { // Note acw will be faster, change later
-    // Turnt to face h2
-    float theta = atan(d/a) * 180.0 / 3.14159; // CONVERT TO DEG
-    ccw();
-    
-    while (currentAngle > (nextNextWallDeg + 180 - theta)) { // Need to make this design more modular
-      // Keep spinning and updating
-
-      // // For debugging
-      // serialOutput(0, 0, currentAngle);
-
-      // Time calculation (in seconds)
-      unsigned long currentTime = micros();
-      float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-      lastTime = currentTime;
-
-      // Read gyro and calculate angular velocity
-      float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-      float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-      float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-      // Update angle (integrate angular velocity)
-      if (abs(angularVelocity) > rotationThreshold) {
-        currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-        delayMicroseconds(3500);
-      }
-    }
-  }
+  // For now
+  serialOutput(0, 0, minh);
+  serialOutput(0, 0, a);
+  serialOutput(0, 0, b);
+  serialOutput(0, 0, c);
+  serialOutput(0, 0, d);
   stop();
+
+  // if (minh == h1) {
+  //   // a and c constitute closest wall
+  //   if (aShort) {
+  //     // Turn to face a (smallest deg)
+  //     // Drive forward by c, then strafe by a
+  //   } else {
+  //     // Turn to face c
+  //     // Drive forward by a, then strafe by c
+  //   }
+  // } else {
+  //   // a and d constitute closest wall
+  //   if (aShort) {
+  //     // Turn to face a (smallest deg)
+  //     // Drive forward by d, then strafe by a
+  //   } else {
+  //     // Turn to face d
+  //     // Drive forward by a, then strafe by d
+  //   }
+  // }
 }
 
 STATE initialising() {
