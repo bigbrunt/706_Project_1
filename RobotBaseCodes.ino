@@ -174,10 +174,7 @@ void findCorner() {
   float nextNextWallReading = 300;
 
   // Rotate clockwise (adjust speed_val as needed) // Moved this out of loop
-  left_front_motor.writeMicroseconds(1500 + speed_val);
-  left_rear_motor.writeMicroseconds(1500 + speed_val);
-  right_front_motor.writeMicroseconds(1500 + speed_val);
-  right_rear_motor.writeMicroseconds(1500 + speed_val);
+  cw();
 
   while (currentAngle < 360) {
     // Find closest wall
@@ -190,18 +187,16 @@ void findCorner() {
       nextNextWallDeg = nextWallDeg + 90;
     }
 
-    // For debugging // SOMETIMES DOESENT WORK WITHOUT THIS
-    // Think I need to add small delays...
-    serialOutput(0, 0, smallestReading);
+    delayMicroseconds(3500); 
 
     if (abs(currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
        nextWallReading = HC_SR04_range();
+       delayMicroseconds(3500); 
     }
 
     if (abs(currentAngle - nextNextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed) // THIS APPEARS TO BE BUGGED
        nextNextWallReading = HC_SR04_range();
-       // For debugging
-       serialOutput(0, 0, nextNextWallReading); // Currently provides necessary delay
+       delayMicroseconds(3500); 
     }
 
     // Time calculation (in seconds)
@@ -217,25 +212,21 @@ void findCorner() {
     // Update angle (integrate angular velocity)
     if (abs(angularVelocity) > rotationThreshold) {
       currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+      delayMicroseconds(3500); 
     }
   }
 
   stop();
-  delay(1000);
+  currentAngle = 360;
+  delay(1000); // Remove for final version
 
   // Check that smallest wall and next wall match
   if (smallestReadingDeg > 180) { // The reading wont match up
     // Rotate clockwise (adjust speed_val as needed) // Add code for acw if faster
-    left_front_motor.writeMicroseconds(1500 + speed_val);
-    left_rear_motor.writeMicroseconds(1500 + speed_val);
-    right_front_motor.writeMicroseconds(1500 + speed_val);
-    right_rear_motor.writeMicroseconds(1500 + speed_val);
+    cw();
 
     while (currentAngle < (smallestReadingDeg + 180)) { // Need to make this design more modular
       // Keep spinning and updating
-
-      // For debugging
-      serialOutput(0, 0, currentAngle);
 
       // Time calculation (in seconds)
       unsigned long currentTime = micros();
@@ -250,35 +241,40 @@ void findCorner() {
       // Update angle (integrate angular velocity)
       if (abs(angularVelocity) > rotationThreshold) {
         currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+        delayMicroseconds(3500); 
       }
 
       if (abs(currentAngle - nextWallDeg) <= 0.5) { // Within +- 0.5 deg (adjust as needed)
        nextWallReading = HC_SR04_range();
+       delayMicroseconds(3500); 
       }
     }
 
     stop();
+    currentAngle = 360 + 180;
     delay(1000);
 
     nextNextWallReading = HC_SR04_range();
   }
 
-  // For debugging
-  serialOutput(0, 0, smallestReading); // Not sure why this outputs garbage
-  serialOutput(0, 0, nextWallReading);
-  serialOutput(0, 0, nextNextWallReading);
+  // // For debugging
+  // serialOutput(0, 0, smallestReading); // Not sure why this outputs garbage
+  // serialOutput(0, 0, nextWallReading);
+  // serialOutput(0, 0, nextNextWallReading);
 
+
+  
   // Find closest corner
-  float a = smallestReading;
-  float b = nextWallReading;
-  float c = nextNextWallReading;
+  float a = smallestReading + 10; // CHECK THE 10, ESTIMATE
+  float b = nextWallReading + 10;
+  float c = nextNextWallReading + 10;
   float d;
   
   if ((a + c) > 140) { // Solid margin of error
     // They constitute the long side
-    d = 120 - b; // Check these values (120)
+    d = 120 - b + 10; // Check these values (120)
   } else {
-    d = 200 - b;
+    d = 200 - b + 10;
   }
 
   // Calc 2 hypotenuses (must use closest wall)
@@ -287,23 +283,22 @@ void findCorner() {
 
   float minh = min(h1, h2);
 
-  // For debugging
-  serialOutput(0, 0, minh);
-  // serialOutput(0, 0, currentAngle);
+  // // For debugging
+  // serialOutput(0, 0, minh);
+  // // serialOutput(0, 0, currentAngle);
 
+  // Havent been accounting for the size of the car
   if (minh == h1) {
-    // Turn to face h1 (clockwise fastest)
-    float theta = atan(b/a);
-    left_front_motor.writeMicroseconds(1500 + speed_val);
-    left_rear_motor.writeMicroseconds(1500 + speed_val);
-    right_front_motor.writeMicroseconds(1500 + speed_val);
-    right_rear_motor.writeMicroseconds(1500 + speed_val);
+    
+    float theta = atan(b/a) * 180.0 / 3.14159; // CONVERT TO DEG
+
+    cw();
 
     while (currentAngle < (360 + smallestReadingDeg + theta)) { // Need to make this design more modular
       // Keep spinning and updating
 
-      // For debugging
-      serialOutput(0, 0, currentAngle);
+      // // For debugging
+      // serialOutput(0, 0, currentAngle);
 
       // Time calculation (in seconds)
       unsigned long currentTime = micros();
@@ -318,21 +313,19 @@ void findCorner() {
       // Update angle (integrate angular velocity)
       if (abs(angularVelocity) > rotationThreshold) {
         currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+        delayMicroseconds(3500);
       }
     }
   } else { // Note acw will be faster, change later
     // Turnt to face h2
-    float theta = atan(d/a);
-    left_front_motor.writeMicroseconds(1500 - speed_val);
-    left_rear_motor.writeMicroseconds(1500 - speed_val);
-    right_front_motor.writeMicroseconds(1500 - speed_val);
-    right_rear_motor.writeMicroseconds(1500 - speed_val);
+    float theta = atan(d/a) * 180.0 / 3.14159; // CONVERT TO DEG
+    ccw();
     
     while (currentAngle > (nextNextWallDeg + 180 - theta)) { // Need to make this design more modular
       // Keep spinning and updating
 
-      // For debugging
-      serialOutput(0, 0, currentAngle);
+      // // For debugging
+      // serialOutput(0, 0, currentAngle);
 
       // Time calculation (in seconds)
       unsigned long currentTime = micros();
@@ -347,6 +340,7 @@ void findCorner() {
       // Update angle (integrate angular velocity)
       if (abs(angularVelocity) > rotationThreshold) {
         currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+        delayMicroseconds(3500);
       }
     }
   }
