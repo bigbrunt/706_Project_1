@@ -230,6 +230,19 @@ void turnTo(float currentAngle, float desiredAngle) {
 }
 
 void findCorner() {
+  // // Debugging
+  // int pin = 23; // Seems to be cm
+  // float coeff = 2261.8;
+  // float exp = -0.981;
+  // int pin = 20; // Seems to be mm
+  // float coeff = 27126;
+  // float exp = -1.038;
+  // float reading = toCm(pin, coeff, exp); 
+  // while(1) {
+  //   reading = toCm(pin, coeff, exp);
+  //   serialOutput(0, 0, reading);
+  // }
+
   currentAngle = 0; // Initial angle zero deg
   unsigned long lastTime = micros();  // Record the starting time
 
@@ -359,6 +372,10 @@ void findCorner() {
   // serialOutput(0, 0, c);
   // serialOutput(0, 0, d);
 
+  // ONLY UPDATE READING IF VALID (GREATER THAN 0)
+
+  // NEED TO CALIBRATE SENSORS AND MAKE SURE IT CAN STRAFE STRAIGHT
+
   // NEED TO ADD FUNCTIONALITY (AND CHECK LOGIC) AND MAKE MORE MODULAR
   if (minh == h1) {
     // a and c constitute closest wall
@@ -369,9 +386,57 @@ void findCorner() {
       delay(1000); // For now
 
       forward();
-      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT, MAKE SURE WE ARE FACING WALL
+      while (HC_SR04_range() > 5) { // CHECK HOW CLOSE WE WANT IT, MAKE SURE WE ARE FACING WALL
         // Do nothing
         delayMicroseconds(3500); // Not sure if delays needed
+      }
+      stop();
+      delay(1000); // For now
+
+      int pin = 23; // Changed pin to debug
+      // float coeff = 2261.8;
+      // float exp = -0.981;
+      float coeff = 27126;
+      float exp = -1.038;
+      float readingOld = 300;
+      float readingNew = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
+
+      // // Debugging
+      // while(1) {
+      //   serialOutput(0, 0, reading); // Debugging
+      //   reading = toCm(pin, coeff, exp);
+      // }
+      // // *****
+
+
+      strafe_right();
+      
+      // // Debugging
+      // while(1) {
+      //   serialOutput(0, 0, reading); // Debugging
+      //   reading = toCm(pin, coeff, exp);
+      // }
+      // // *****
+
+      while (readingOld > 60) { // CHECK HOW CLOSE WE WANT IT // Right sensor seems to measure in cm
+        readingNew = toCm(pin, coeff, exp);
+        if (readingNew > 0) {
+          readingOld = readingNew;
+        }
+        serialOutput(0, 0, readingOld); // Debugging
+        // delayMicroseconds(3500); // Not sure if delays needed
+      }
+      stop(); // Can move this to end of section
+      delay(1000);
+    } else {
+      // Drive to c, strafe left
+      turnTo(currentAngle, wall1Deg);
+      delay(1000); // For now
+
+      forward();
+      while (HC_SR04_range() > 5) { // CHECK HOW CLOSE WE WANT IT
+        // Do nothing
+        delayMicroseconds(3500);
       }
       stop();
       delay(1000); // For now
@@ -379,35 +444,21 @@ void findCorner() {
       int pin = 20;
       float coeff = 27126;
       float exp = -1.038;
-      strafe_right();
-      float reading = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
-      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
-        reading = toCm(pin, coeff, exp);
+      float readingOld = 300;
+      float readingNew = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
+
+      strafe_left();
+      
+      while (readingOld > 60) { // CHECK HOW CLOSE WE WANT IT
+        readingNew = toCm(pin, coeff, exp);
+        if (readingNew > 0) {
+          readingOld = readingNew;
+        }
+        // serialOutput(0, 0, reading); // Debugging
         delayMicroseconds(3500); // Not sure if delays needed
       }
       stop(); // Can move this to end of section
-    } else {
-      // Drive to c, strafe left
-      turnTo(currentAngle, wall1Deg);
-      delay(1000); // For now
-
-      forward();
-      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
-        // Do nothing
-        delayMicroseconds(3500);
-      }
-      stop();
-      delay(1000); // For now
-
-      int pin = 18;
-      float coeff = 2261.8;
-      float exp = -0.981;
-      strafe_left();
-      float reading = toCm(pin, coeff, exp); 
-      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
-        reading = toCm(pin, coeff, exp);
-        delayMicroseconds(3500);
-      }
+      delay(1000);
     }
   } else {
     // a and d constitute closest wall
@@ -418,23 +469,31 @@ void findCorner() {
 
       // Drive forward by d, then strafe by a
       forward();
-      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
+      while (HC_SR04_range() > 5) { // CHECK HOW CLOSE WE WANT IT
         // Do nothing
         delayMicroseconds(3500);
       }
       stop();
       delay(1000); // For now
 
-      int pin = 18;
-      float coeff = 2261.8;
-      float exp = -0.981;
+      int pin = 20;
+      float coeff = 27126;
+      float exp = -1.038;
+      float readingOld = 300;
+      float readingNew = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
+
       strafe_left();
-      float reading = toCm(pin, coeff, exp); 
-      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
-        reading = toCm(pin, coeff, exp);
-        delayMicroseconds(3500);
+
+      while (readingOld > 60) { // CHECK HOW CLOSE WE WANT IT
+        readingNew = toCm(pin, coeff, exp);
+        if (readingNew > 0) {
+          readingOld = readingNew;
+        }
+        // serialOutput(0, 0, reading); // Debugging
+        delayMicroseconds(3500); // Not sure if delays needed
       }
-      stop();
+      stop(); // Can move this to end of section
+      delay(1000);
 
     } else {
       // Turn to face d
@@ -443,22 +502,32 @@ void findCorner() {
 
       // Drive forward by a, then strafe by d
       forward();
-      while (HC_SR04_range() > 3) { // CHECK HOW CLOSE WE WANT IT
+      while (HC_SR04_range() > 5) { // CHECK HOW CLOSE WE WANT IT
         // Do nothing
         delayMicroseconds(3500);
       }
       stop();
 
-      int pin = 20;
+      int pin = 23;
+      // float coeff = 2261.8;
+      // float exp = -0.981;
       float coeff = 27126;
       float exp = -1.038;
+      float readingOld = 300;
+      float readingNew = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
+
       strafe_right();
-      float reading = toCm(pin, coeff, exp); // CHECK WHAT OUT OF RANGE READING IS
-      while (reading > 3) { // CHECK HOW CLOSE WE WANT IT
-        reading = toCm(pin, coeff, exp);
-        delayMicroseconds(3500);
+
+      while (readingOld > 60) { // CHECK HOW CLOSE WE WANT IT
+        readingNew = toCm(pin, coeff, exp);
+        if (readingNew > 0) {
+          readingOld = readingNew;
+        }
+        serialOutput(0, 0, readingOld); // Debugging
+        // delayMicroseconds(3500); // Not sure if delays needed
       }
       stop(); // Can move this to end of section
+      delay(1000);
     }
   }
 }
