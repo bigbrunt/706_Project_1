@@ -73,6 +73,10 @@ double lx = 0.0759; // x radius (m) (robot)
 double ly = 0.09; // y radius (m) (robot  )
 double rw = 0.0275; //wheel radius (m)
 
+//
+double sens_x = 0; //US signal processed sensor value  for control sys
+double max_x = 100; // max drivable x length
+double error_x = 0;
 // Control sys Arrays
 double speed_array[4][1]; // array of speed values for the motors
 double control_effort_array[3][1]; // array of xyz control efforts from pid controlers
@@ -85,6 +89,7 @@ double kp_z = 0;
 double ki_x = 0;
 double ki_y = 0;
 double ki_z = 0;
+double power_lim = 700;
 
 // initial speed value (for serial movement control)
 int speed_val = 100;
@@ -325,9 +330,9 @@ float HC_SR04_range() {
   if (pulse_width > MAX_DIST) {
     SerialCom->println("HC-SR04: Out of range");
   } else {
-    //    SerialCom->print("HC-SR04:");
-    //    SerialCom->print(cm);
-    //    SerialCom->println("cm");
+//        SerialCom->print("HC-SR04:");
+//        SerialCom->print(cm);
+//        SerialCom->println("cm");
     return cm;
   }
 }
@@ -349,7 +354,7 @@ void GYRO_reading() {
 void goToWall() {
 
   while (1) {
-    control(1, 0, 0);
+    control(1, 0, 0,1);
     calcSpeed();
     move();
     delay(1000);
@@ -359,9 +364,16 @@ void goToWall() {
 }
 
 
-void control(bool toggle_x, bool toggle_y, bool toggle_z) {
+void control(bool toggle_x, bool toggle_y, bool toggle_z,bool to_wall) {
+  // implement states for different control directions (to wall / away from wall
+  sens_x = HC_SR04_range()-4;
+
+  //calc error_x based on to wall or away from wall
+  to_wall ? error_x = constrain(sens_x,0,9999) : error_x = constrain((sens_x - max_x),-9999,0);
+
+// calc control efforts
   control_effort_array[0][0] = (toggle_x)
-                               ? HC_SR04_range() * kp_x + ki_memory_array[0][0] * ki_x
+                               ? error_x* kp_x
                                : 0;
   control_effort_array[1][0] = (toggle_y)
                                ? 0
@@ -370,37 +382,43 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z) {
                                ? 0
                                : 0;
 
+  
+
   ki_memory_array[0][0] += control_effort_array[0][0];
   ki_memory_array[1][0] += control_effort_array[1][0];
   ki_memory_array[2][0] += control_effort_array[2][0];
 
   //  Serial.println(HC_SR04_range());
-  //  Serial.println(control_effort_array[1][1]);
+  Serial.println(control_effort_array[0][0]);
 }
 
 void calcSpeed() {
-  speed_array[0][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -100, 100);
-  speed_array[1][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -100, 100);
-  speed_array[2][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -100, 100);
-  speed_array[3][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -100, 100);
+  speed_array[0][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
+  speed_array[1][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
+  speed_array[2][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
+  speed_array[3][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
   Serial.print(speed_array[0][0]);
+  Serial.print(" ");
   Serial.print(speed_array[1][0]);
+  Serial.print(" ");
   Serial.print(speed_array[2][0]);
+  Serial.print(" ");
   Serial.print(speed_array[3][0]);
+  Serial.print(" ");
   Serial.println(".");
 
 }
 
 
 void move() {
-//  left_front_motor.writeMicroseconds(1500 + speed_array[0][0]);
-//  left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
-//  right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
-//  right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
-  left_front_motor.writeMicroseconds(1500 + 100);
-  left_rear_motor.writeMicroseconds(1500 + 100);
-  right_rear_motor.writeMicroseconds(1500 - 100);
-  right_front_motor.writeMicroseconds(1500 - 100);
+  left_front_motor.writeMicroseconds(1500 + speed_array[0][0]);
+  left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
+  right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
+  right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
+//  left_front_motor.writeMicroseconds(1500 + 100);
+//  left_rear_motor.writeMicroseconds(1500 + 100);
+//  right_rear_motor.writeMicroseconds(1500 - 100);
+//  right_front_motor.writeMicroseconds(1500 - 100);
 }
 
 
