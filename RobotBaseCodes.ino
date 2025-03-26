@@ -23,6 +23,7 @@
 #include <SoftwareSerial.h> // For wireless communication
 #include <Arduino.h>
 
+
 // Serial Data input pin
 #define BLUETOOTH_RX 10
 // Serial Data output pin
@@ -39,12 +40,6 @@
 //#define NO_HC-SR04 //Uncomment of HC-SR04 ultrasonic ranging sensor is not attached.
 //#define NO_BATTERY_V_OK //Uncomment of BATTERY_V_OK if you do not care about battery damage.
 
-//State machine states
-enum STATE {
-  INITIALISING,
-  RUNNING,
-  STOPPED
-};
 
 //Refer to Shield Pinouts.jpg for pin locations
 
@@ -68,15 +63,27 @@ Servo right_rear_motor;  // create servo object to control Vex Motor Controller 
 Servo right_front_motor;  // create servo object to control Vex Motor Controller 29
 Servo turret_motor;
 
+/* ----------------------------------------------- CONTROL SYS ---------------------------------------------- */
+//State machine states
+enum State {
+  TOWALL,
+  AWAYWALL,
+  NEXTLANE,
+  STOP
+};
+
 // Kinematic Constants
 double lx = 0.0759; // x radius (m) (robot)
 double ly = 0.09; // y radius (m) (robot  )
 double rw = 0.0275; //wheel radius (m)
 
-//
+//MISC
 double sens_x = 0; //US signal processed sensor value  for control sys
 double max_x = 100; // max drivable x length
 double error_x = 0;
+double error_y = 0;
+double error_z = 0;
+
 // Control sys Arrays
 double speed_array[4][1]; // array of speed values for the motors
 double control_effort_array[3][1]; // array of xyz control efforts from pid controlers
@@ -91,95 +98,20 @@ double ki_y = 0;
 double ki_z = 0;
 double power_lim = 700;
 
+//timing
+double start_time = 0;
+double elasped_time = 0;
+
 // initial speed value (for serial movement control)
 int speed_val = 100;
-int speed_change;
-
-
-const int bufferSize = 400;  // Fixed buffer size of 100
-int buffer[bufferSize];      // Array to hold the buffer
-int front = 0;               // Index for the front of the buffer
-int rear = 0;                // Index for the rear of the buffer
-int size = 0;                // Current number of elements in the buffer
-long sum = 0;                // Sum of the elements in the buffer (long for large sums)
+/*------------------------------------------------------------------------------------- */
 
 //Serial Pointer for USB com
 HardwareSerial *SerialCom;
-
-int pos = 0;
-
-volatile int32_t Counter = 1; // Used to delay serial outputs
-
 SoftwareSerial BluetoothSerial(BLUETOOTH_RX, BLUETOOTH_TX);
 
 
-class RingBuf {
-  private:
-    int buffer[bufferSize];      // Array to hold the buffer
-    int front = 0;               // Index for the front of the buffer
-    int rear = 0;                // Index for the rear of the buffer
-    int size = 0;                // Current number of elements in the buffer
-    int pin;                    // pin number
-    double coefficent;             // coefficent for ADC -> cm equation
-    double exponent;            // exponent for ADC -> cm equation
-    long sum = 0;                // Sum of the elements in the buffer (long for large sums)
-
-  public:
-    RingBuf(int p, double c, double e) {
-      pin = p;
-      coefficent = c;
-      exponent = e;
-      pinMode(pin, OUTPUT);
-    }
-    void intialise_buf() {
-      // Initialize the buffer with 0s (optional)
-      for (int i = 0; i < bufferSize; i++) {
-        buffer[i] = 0;
-      }
-    }
-
-    void push() {
-      if (size == bufferSize) {
-        // If the buffer is full, subtract the oldest value from the sum
-        sum -= buffer[front];
-        front = (front + 1) % bufferSize; // Move the front pointer forward
-      } else {
-        size++;
-      }
-
-      // Add the new value to the buffer and update the sum
-      int value =  (int) coefficent * pow(analogRead(pin), exponent);
-      // int value = analogRead(pin);
-      buffer[rear] = value;  // Reading from analog pin;
-      sum += value;
-
-      // Move the rear pointer forward
-      rear = (rear + 1) % bufferSize;
-    }
-
-    // Function to calculate the moving average
-    int32_t movingAverage() {
-      if (size == 0) {
-        return 0; // Avoid division by zero if the buffer is empty
-      }
-      return (int32_t)sum / size;
-    }
-};
-
-RingBuf IR_Long1(21, 3536.6, -0.86);
-RingBuf IR_Long2(19, 5928.2, -1.062);
-RingBuf IR_Short1(20, 27126, -1.038);
-RingBuf IR_Short2(18, 2261.8, -0.981);
-
-
 void setup(void) {
-  turret_motor.attach(11);
-  pinMode(LED_BUILTIN, OUTPUT);
-
-  // The Trigger pin will tell the sensor to range find
-  pinMode(TRIG_PIN, OUTPUT);
-  digitalWrite(TRIG_PIN, LOW);
-
   // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
   SerialCom = &Serial;
   SerialCom->begin(115200);
@@ -187,54 +119,29 @@ void setup(void) {
   delay(1000);
   SerialCom->println("Setup....");
 
+  
+  turret_motor.attach(11);
+  pinMode(LED_BUILTIN, OUTPUT);
 
-  BluetoothSerial.begin(115200);
-
-  //delay(1000);  //settling time but no really needed
+  // The Trigger pin will tell the sensor to range find
+  pinMode(TRIG_PIN, OUTPUT);
+  digitalWrite(TRIG_PIN, LOW);
 
   
-
+  SerialCom->println("Running in 3...");
+  delay(3000);
+  
 }
 
 void loop(void)  //main loop
 {
+  if(is_battery_voltage_OK){
   enable_motors();
   goToWall();
-}
-
-void fast_flash_double_LED_builtin() {
-  static byte indexer = 0;
-  static unsigned long fast_flash_millis;
-  if (millis() > fast_flash_millis) {
-    indexer++;
-    if (indexer > 4) {
-      fast_flash_millis = millis() + 700;
-      digitalWrite(LED_BUILTIN, LOW);
-      indexer = 0;
-    } else {
-      fast_flash_millis = millis() + 100;
-      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    }
   }
 }
 
-void slow_flash_LED_builtin() {
-  static unsigned long slow_flash_millis;
-  if (millis() - slow_flash_millis > 2000) {
-    slow_flash_millis = millis();
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  }
-}
 
-//for serial speed control
-void speed_change_smooth() {
-  speed_val += speed_change;
-  if (speed_val > 1000)
-    speed_val = 1000;
-  speed_change = 0;
-}
-
-#ifndef NO_BATTERY_V_OK
 boolean is_battery_voltage_OK() {
   static byte Low_voltage_counter;
   static unsigned long previous_millis;
@@ -278,9 +185,7 @@ boolean is_battery_voltage_OK() {
       return true;
   }
 }
-#endif
 
-#ifndef NO_HC - SR04
 float HC_SR04_range() {
   unsigned long t1;
   unsigned long t2;
@@ -330,66 +235,75 @@ float HC_SR04_range() {
   if (pulse_width > MAX_DIST) {
     SerialCom->println("HC-SR04: Out of range");
   } else {
-//        SerialCom->print("HC-SR04:");
-//        SerialCom->print(cm);
-//        SerialCom->println("cm");
+    //        SerialCom->print("HC-SR04:");
+    //        SerialCom->print(cm);
+    //        SerialCom->println("cm");
     return cm;
   }
 }
-#endif
 
-void Analog_Range_A4() {
-  SerialCom->print("Analog Range A4:");
-  SerialCom->println(analogRead(A4));
-}
-
-#ifndef NO_READ_GYRO
-void GYRO_reading() {
-  SerialCom->print("GYRO A3:");
-  SerialCom->println(analogRead(A3));
-}
-#endif
 
 
 void goToWall() {
-
+start_time = millis();
   while (1) {
-    control(1, 0, 0,1);
-    calcSpeed();
-    move();
-    delay(1000);
+    State state = TOWALL;
+    
+    control(1, 0, 0, state);
+    //delay(1000);
   }
 
 
 }
 
 
-void control(bool toggle_x, bool toggle_y, bool toggle_z,bool to_wall) {
+void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   // implement states for different control directions (to wall / away from wall
-  sens_x = HC_SR04_range()-4;
+  sens_x = HC_SR04_range() - 4;
 
   //calc error_x based on to wall or away from wall
-  to_wall ? error_x = constrain(sens_x,0,9999) : error_x = constrain((sens_x - max_x),-9999,0);
+  switch (run_state) {
+    case TOWALL:
+      //Serial.println("TO WALL");
+      error_x = constrain(sens_x, 0, 9999);
+      error_y = 0;
+      error_z = 0;
+      break;
+    case AWAYWALL:
+      //Serial.println("AWAY WALL");
+      error_x = constrain((sens_x - max_x), -9999, 0);
+      error_y = 0;
+      error_z = 0;
+      break;
+    case NEXTLANE:
+      error_x = 0;
+      error_y = 0; // not actually
+      error_z = 0;
+      break;
+      
 
-// calc control efforts
+  }
+
+  // calc control efforts
   control_effort_array[0][0] = (toggle_x)
-                               ? error_x* kp_x
+                               ? error_x * kp_x 
                                : 0;
   control_effort_array[1][0] = (toggle_y)
-                               ? 0
+                               ? error_y * kp_y
                                : 0;
-  control_effort_array[2][0] = (toggle_x)
-                               ? 0
+  control_effort_array[2][0] = (toggle_z)
+                               ? error_z * kp_z
                                : 0;
-
-  
 
   ki_memory_array[0][0] += control_effort_array[0][0];
   ki_memory_array[1][0] += control_effort_array[1][0];
   ki_memory_array[2][0] += control_effort_array[2][0];
 
   //  Serial.println(HC_SR04_range());
-  Serial.println(control_effort_array[0][0]);
+  //Serial.println(control_effort_array[0][0]);
+
+  calcSpeed();
+  move();
 }
 
 void calcSpeed() {
@@ -397,15 +311,35 @@ void calcSpeed() {
   speed_array[1][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
   speed_array[2][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
   speed_array[3][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
-  Serial.print(speed_array[0][0]);
-  Serial.print(" ");
-  Serial.print(speed_array[1][0]);
-  Serial.print(" ");
-  Serial.print(speed_array[2][0]);
-  Serial.print(" ");
-  Serial.print(speed_array[3][0]);
-  Serial.print(" ");
-  Serial.println(".");
+//  Serial.print(speed_array[0][0]);
+//  Serial.print(" ");
+//  Serial.print(speed_array[1][0]);
+//  Serial.print(" ");
+//  Serial.print(speed_array[2][0]);
+//  Serial.print(" ");
+//  Serial.print(speed_array[3][0]);
+//  Serial.print(" ");
+//  Serial.println(" ");
+
+  //smooth accell for 1sec via multiplicative approach
+  elasped_time = (millis()-start_time)/1000;
+  if(elasped_time <= 1){
+  speed_array[0][0] *= (1-exp(-5*elasped_time) ); // 5 so reaches full value in 1 sec
+  speed_array[1][0] *= (1-exp(-5*elasped_time) );
+  speed_array[2][0] *= (1-exp(-5*elasped_time) );
+  speed_array[3][0] *= (1-exp(-5*elasped_time) );
+
+//  Serial.print(speed_array[0][0]);
+//  Serial.print(" ");
+//  Serial.print(speed_array[1][0]);
+//  Serial.print(" ");
+//  Serial.print(speed_array[2][0]);
+//  Serial.print(" ");
+//  Serial.print(speed_array[3][0]);
+//  Serial.print(" ");
+//  Serial.println(" ");
+//  Serial.println(" ");
+  }
 
 }
 
@@ -415,10 +349,10 @@ void move() {
   left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
   right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
   right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
-//  left_front_motor.writeMicroseconds(1500 + 100);
-//  left_rear_motor.writeMicroseconds(1500 + 100);
-//  right_rear_motor.writeMicroseconds(1500 - 100);
-//  right_front_motor.writeMicroseconds(1500 - 100);
+  //  left_front_motor.writeMicroseconds(1500 + 100);
+  //  left_rear_motor.writeMicroseconds(1500 + 100);
+  //  right_rear_motor.writeMicroseconds(1500 - 100);
+  //  right_front_motor.writeMicroseconds(1500 - 100);
 }
 
 
