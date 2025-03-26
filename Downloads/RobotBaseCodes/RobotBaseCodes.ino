@@ -53,15 +53,35 @@ Servo right_rear_motor;   // create servo object to control Vex Motor Controller
 Servo right_front_motor;  // create servo object to control Vex Motor Controller 29
 Servo turret_motor;
 
-double lx = 0.0759;  // x radius (m) (robot)
-double ly = 0.09;    // y radius (m) (robot  )
-double rw = 0.0275;  //wheel radius (m)
+// ---------------- CONTROL SYS GLOBALS ---------------
+// Kinematic Constants
+double lx = 0.0759; // x radius (m) (robot)
+double ly = 0.09; // y radius (m) (robot  )
+double rw = 0.0275; //wheel radius (m)
 
-double speed_array[4][1];           // array of speed values for the motors
-double control_effort_array[3][1];  // array of xyz control efforts from pid controlers
+//misc
+double sens_x = 0; //US signal processed sensor value  for control sys
+double max_x = 100; // max drivable x length
+double error_x = 0;
 
+// Control sys Arrays
+double speed_array[4][1]; // array of speed values for the motors
+double control_effort_array[3][1]; // array of xyz control efforts from pid controlers
+double ki_memory_array[3][1];
+
+// CONTROL GAIN VALUES
+double kp_x = 0.75;
+double kp_y = 0;
+double kp_z = 0;
+double ki_x = 0;
+double ki_y = 0;
+double ki_z = 0;
+double power_lim = 700;
+
+//existing vex functions (very bottom of code)
 int speed_val = 100;
-int speed_change;
+// ------------------------------------------------------
+
 
 //Serial Pointer for USB com
 HardwareSerial *SerialCom;
@@ -118,32 +138,27 @@ void loop(void)  //main loop
      float s2_data = s2.read();
      delay(500);
      Serial.println(l2_data);
-  };
+
+     //goToWall();
+};
 
 
-// void updateAngle(unsigned long &lastTime) {
-//   // Get the current time in microseconds
-//   unsigned long currentTime = micros();
-  
-//   // Calculate the time elapsed since the last update (in seconds)
-//   float deltaTime = (currentTime - lastTime) / 1e6;  // Convert microseconds to seconds
-//   lastTime = currentTime;  // Update the last time to current time
+float updateAngle(unsigned long lastTime, float currentAngle) {
+     // Time calculation (in seconds)
+    unsigned long currentTime = micros();
+    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+    lastTime = currentTime;
 
-//   // Read the gyro voltage from the analog pin
-//   float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-  
-//   // Calculate the angular rate (gyro rate) from the voltage
-//   float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-  
-//   // Convert the gyro rate to angular velocity (°/s)
-//   float angularVelocity = gyroRate / gyroSensitivity;
+    // Read gyro and calculate angular velocity
+    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
+    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
 
-//   // If the angular velocity is above the threshold, update the current angle
-//   if (abs(angularVelocity) > rotationThreshold) {
-//     currentAngle += angularVelocity * deltaTime;  // Integrate angular velocity over time to get the angle
-//     delayMicroseconds(3500);
-//   }
-// }
+    // Update angle (integrate angular velocity)
+    if (abs(angularVelocity) > rotationThreshold) {
+      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+    } 
+}
 
 float toCm(int pin, float coeff, float exp) {
   int value = (int)(coeff * pow(analogRead(pin), exp));
@@ -174,23 +189,13 @@ void turnTo(float currentAngle, float desiredAngle) {
     delayMicroseconds(3500);
 
     // Time calculation (in seconds)
-    unsigned long currentTime = micros();
-    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-    lastTime = currentTime;
-
-    // Read gyro and calculate angular velocity
-    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-    // Update angle (integrate angular velocity)
-    if (abs(angularVelocity) > rotationThreshold) {
-      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-    } 
+    // updates current angle
+    currentAngle = updateAngle(lastTime, currentAngle);
   }
   stop();  // Stop the motors when the desired angle is reached
 }
 
+// charlies magnum XL func
 void findCorner() {
   // // Debugging
   // int pin = 23; // Seems to be cm
@@ -241,21 +246,8 @@ void findCorner() {
        wall2Reading = HC_SR04_range();
        delayMicroseconds(3500); // This only works with a delay
     }
-
-    // Time calculation (in seconds)
-    unsigned long currentTime = micros();
-    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-    lastTime = currentTime;
-
-    // Read gyro and calculate angular velocity
-    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-    // Update angle (integrate angular velocity)
-    if (abs(angularVelocity) > rotationThreshold) {
-      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-    } 
+    // updates current angle
+    currentAngle = updateAngle(lastTime, currentAngle);
   }
 
   stop();
@@ -268,20 +260,8 @@ void findCorner() {
     while (currentAngle < (smallestDeg + 180)) {
       delayMicroseconds(3500);
 
-      // Time calculation (in seconds)
-      unsigned long currentTime = micros();
-      float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
-      lastTime = currentTime;
-
-      // Read gyro and calculate angular velocity
-      float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-      float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
-      float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-      // Update angle (integrate angular velocity)
-      if (abs(angularVelocity) > rotationThreshold) {
-        currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
-      } 
+      // updates current angle
+      currentAngle = updateAngle(lastTime, currentAngle);
 
       if (abs(currentAngle - wall1Deg) <= 0.5) { // Can probably reduce this
         wall1Reading = HC_SR04_range();
@@ -495,38 +475,31 @@ void findCorner() {
 }
 
 
-void fast_flash_double_LED_builtin() {
-  static byte indexer = 0;
-  static unsigned long fast_flash_millis;
-  if (millis() > fast_flash_millis) {
-    indexer++;
-    if (indexer > 4) {
-      fast_flash_millis = millis() + 700;
-      digitalWrite(LED_BUILTIN, LOW);
-      indexer = 0;
-    } else {
-      fast_flash_millis = millis() + 100;
-      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    }
-  }
-}
+// void fast_flash_double_LED_builtin() {
+//   static byte indexer = 0;
+//   static unsigned long fast_flash_millis;
+//   if (millis() > fast_flash_millis) {
+//     indexer++;
+//     if (indexer > 4) {
+//       fast_flash_millis = millis() + 700;
+//       digitalWrite(LED_BUILTIN, LOW);
+//       indexer = 0;
+//     } else {
+//       fast_flash_millis = millis() + 100;
+//       digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+//     }
+//   }
+// }
 
-void slow_flash_LED_builtin() {
-  static unsigned long slow_flash_millis;
-  if (millis() - slow_flash_millis > 2000) {
-    slow_flash_millis = millis();
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  }
-}
+// void slow_flash_LED_builtin() {
+//   static unsigned long slow_flash_millis;
+//   if (millis() - slow_flash_millis > 2000) {
+//     slow_flash_millis = millis();
+//     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+//   }
+// }
 
-void speed_change_smooth() {
-  speed_val += speed_change;
-  if (speed_val > 1000)
-    speed_val = 1000;
-  speed_change = 0;
-}
 
-#ifndef NO_BATTERY_V_OK
 boolean is_battery_voltage_OK() {
   static byte Low_voltage_counter;
   static unsigned long previous_millis;
@@ -570,9 +543,9 @@ boolean is_battery_voltage_OK() {
       return true;
   }
 }
-#endif
 
-#ifndef NO_HC - SR04
+
+
 float HC_SR04_range() {
   unsigned long t1;
   unsigned long t2;
@@ -628,119 +601,76 @@ float HC_SR04_range() {
     return cm;
   }
 }
-#endif
-
-void Analog_Range_A4() {
-  SerialCom->print("Analog Range A4:");
-  SerialCom->println(analogRead(A4));
-}
-
-#ifndef NO_READ_GYRO
-void GYRO_reading() {
-  SerialCom->print("GYRO A3:");
-  SerialCom->println(analogRead(A3));
-}
-#endif
-
-//Serial command pasing
-void read_serial_command() {
-  if (SerialCom->available()) {
-    char val = SerialCom->read();
-    SerialCom->print("Speed:");
-    SerialCom->print(speed_val);
-    SerialCom->print(" ms ");
-
-    //Perform an action depending on the command
-    switch (val) {
-      case 'w':  //Move Forward
-      case 'W':
-        forward();
-        SerialCom->println("Forward");
-        break;
-      case 's':  //Move Backwards
-      case 'S':
-        reverse();
-        SerialCom->println("Backwards");
-        break;
-      case 'a':  //Strafe Left
-      case 'A':
-        strafe_left();
-        SerialCom->println("Strafe Left");
-        break;
-      case 'd':  //Strafe Right
-      case 'D':
-        strafe_right();
-        SerialCom->println("Strafe Right");
-        break;
-      case 'q':  //Turn Left
-      case 'Q':
-        ccw();
-        SerialCom->println("ccw");
-        break;
-      case 'e':  //Turn Right
-      case 'E':
-        cw();
-        SerialCom->println("cw");
-        break;
-      case '-':  // - speed
-      case '_':
-        speed_change = -100;
-        SerialCom->println("-100");
-        break;
-      case '=':
-      case '+':  // + speed
-        speed_change = 100;
-        SerialCom->println("+");
-        break;
-      case 'x':
-      case 'X':
-        stop();
-        SerialCom->println("stop");
-        break;
-      case 'r':
-      case 'R':
-        goToWall();
-        // bluetoothSerial.print("Go To Wall");
-        break;
-      default:
-        stop();
-        SerialCom->println("stop");
-        break;
-    }
-  }
-}
-
-
-void calcSpeed() {
-  speed_array[1][1] = (int)(1 / rw) * (control_effort_array[1][1] - control_effort_array[2][1] - (lx + ly) * control_effort_array[3][1]);
-  speed_array[2][1] = (int)(1 / rw) * (control_effort_array[1][1] + control_effort_array[2][1] + (lx + ly) * control_effort_array[3][1]);
-  speed_array[3][1] = (int)(1 / rw) * (control_effort_array[1][1] - control_effort_array[2][1] + (lx + ly) * control_effort_array[3][1]);
-  speed_array[4][1] = (int)(1 / rw) * (control_effort_array[1][1] + control_effort_array[2][1] - (lx + ly) * control_effort_array[3][1]);
-}
-
-void control() {
-  control_effort_array[1][1] = 10;  // x
-  control_effort_array[2][1] = 0;   // y
-  control_effort_array[3][1] = 0;   // z
-}
 
 void goToWall() {
 
-  while (HC_SR04_range() > 10) {
-    control_effort_array[1][1] = 10;
+  while (1) {
+    control(1, 0, 0,1);
     calcSpeed();
     move();
-    SerialCom->println(control_effort_array[2][1]);
+    delay(1000);
   }
-  stop();
+
+
+}
+
+
+void control(bool toggle_x, bool toggle_y, bool toggle_z,bool to_wall) {
+  // implement states for different control directions (to wall / away from wall
+  sens_x = HC_SR04_range()-4;
+
+  //calc error_x based on to wall or away from wall
+  to_wall ? error_x = constrain(sens_x,0,9999) : error_x = constrain((sens_x - max_x),-9999,0);
+
+// calc control efforts
+  control_effort_array[0][0] = (toggle_x)
+                               ? error_x* kp_x
+                               : 0;
+  control_effort_array[1][0] = (toggle_y)
+                               ? 0
+                               : 0;
+  control_effort_array[2][0] = (toggle_x)
+                               ? 0
+                               : 0;
+
+
+  ki_memory_array[0][0] += control_effort_array[0][0];
+  ki_memory_array[1][0] += control_effort_array[1][0];
+  ki_memory_array[2][0] += control_effort_array[2][0];
+
+  //  Serial.println(HC_SR04_range());
+  //Serial.println(control_effort_array[0][0]);
+}
+
+void calcSpeed() {
+  speed_array[0][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
+  speed_array[1][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
+  speed_array[2][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
+  speed_array[3][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
+  // Serial.print(speed_array[0][0]);
+  // Serial.print(" ");
+  // Serial.print(speed_array[1][0]);
+  // Serial.print(" ");
+  // Serial.print(speed_array[2][0]);
+  // Serial.print(" ");
+  // Serial.print(speed_array[3][0]);
+  // Serial.print(" ");
+  // Serial.println(".");
+
 }
 
 void move() {
-  left_front_motor.writeMicroseconds(1500 + speed_array[1][1]);
-  left_rear_motor.writeMicroseconds(1500 + speed_array[4][1]);
-  right_rear_motor.writeMicroseconds(1500 - speed_array[3][1]);
-  right_front_motor.writeMicroseconds(1500 - speed_array[2][1]);
+  left_front_motor.writeMicroseconds(1500 + speed_array[0][0]);
+  left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
+  right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
+  right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
+//  left_front_motor.writeMicroseconds(1500 + 100);
+//  left_rear_motor.writeMicroseconds(1500 + 100);
+//  right_rear_motor.writeMicroseconds(1500 - 100);
+//  right_front_motor.writeMicroseconds(1500 - 100);
 }
+
+
 
 
 //----------------------Motor moments------------------------
