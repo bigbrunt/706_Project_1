@@ -227,13 +227,28 @@ void findCorner() {
   int dist90 = boxMap.get_distance(index90);
   int dist180 = boxMap.get_distance(index180);
   int dist270 = boxMap.get_distance(index270);
+
+  int boxLength1 = smallest_dist + dist180;
+  int boxLength2 = dist90 + dist270;
+
+  /////////////////////////////////////NEXT TO IMPLEMENT////////////////////////////////////////////////
+  // find the long side of box and turn towards
+  // if(boxLength1>boxLength2){
+  //   // turn towards smallest_dist
+  //   if()
+  // } else{
+  //   // turn towards dist90
+  // }
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   
-  serialOutput(0, 0, smallest_dist);
-  serialOutput(0, 0, dist90);
-  serialOutput(0, 0, dist180);
-  serialOutput(0, 0, dist270);
 
   ///SERIALLLLLLLLLL CHECKSSSSSSSSSSSSSS////////////////////////////////
+
+  // serialOutput(0, 0, smallest_dist);
+  // serialOutput(0, 0, dist90);
+  // serialOutput(0, 0, dist180);
+  // serialOutput(0, 0, dist270);
+
   // Serial.println("Stored angles:");
   //   for (size_t i = 0; i < boxMap.length(); i++) {
   //   Serial.print(boxMap.get_angle(i));
