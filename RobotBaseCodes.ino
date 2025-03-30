@@ -63,12 +63,29 @@ Servo right_rear_motor;  // create servo object to control Vex Motor Controller 
 Servo right_front_motor;  // create servo object to control Vex Motor Controller 29
 Servo turret_motor;
 
+/* ----------------------------------------------- GRYO ---------------------------------------------- */
+const int gyroPin = A3;
+int sensorValue = 0;
+float gyroSupplyVoltage = 5;
+float gyroZeroVoltage = 0;      // Voltage when not rotating
+float gyroSensitivity = 0.007;  // Taken from data sheets
+float rotationThreshold = 3;    // For gyro drift correction
+float gyroRate = 0;
+float currentAngle = 0;
+
+//timing
+unsigned long angle_lastTime = 0;
+
+
+
+/* ----------------------------------------------- ---- ---------------------------------------------- */
 /* ----------------------------------------------- CONTROL SYS ---------------------------------------------- */
 //State machine states
 enum State {
   TOWALL,
   AWAYWALL,
   NEXTLANE,
+  FULLSPIN,
   STOP
 };
 
@@ -79,6 +96,7 @@ double rw = 0.0275; //wheel radius (m)
 
 //MISC
 double sens_x = 0; //US signal processed sensor value  for control sys
+double sens_z = 0; // angle 
 double max_x = 100; // max drivable x length
 double error_x = 0;
 double error_y = 0;
@@ -92,15 +110,16 @@ double ki_memory_array[3][1];
 // CONTROL GAIN VALUES
 double kp_x = 0.75;
 double kp_y = 0;
-double kp_z = 0;
+double kp_z = 2;
 double ki_x = 0;
 double ki_y = 0;
 double ki_z = 0;
-double power_lim = 700;
+double power_lim = 700; // max vex motor power
 
 //timing
-double start_time = 0;
-double elasped_time = 0;
+uint32_t accel_start_time = 0;
+uint32_t accel_elasped_time = 0;
+
 
 // initial speed value (for serial movement control)
 int speed_val = 100;
@@ -242,13 +261,30 @@ float HC_SR04_range() {
   }
 }
 
+float updateAngle() {
+     // Time calculation (in seconds)
+    unsigned long angle_currentTime = micros();
+    float angle_deltaTime = (angle_currentTime - angle_lastTime) / 1e6;  // Convert µs to seconds
+    angle_lastTime = angle_currentTime;
+
+    // Read gyro and calculate angular velocity
+    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1027.0);
+    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+
+    // Update angle (integrate angular velocity)
+    if (abs(angularVelocity) > rotationThreshold) {
+      currentAngle += angularVelocity * angle_deltaTime;  // θ = ∫ω dt
+      return currentAngle;
+    } 
+    
+}
 
 
 void goToWall() {
-start_time = millis();
+accel_start_time = millis();
   while (1) {
     State state = TOWALL;
-    
     control(1, 0, 0, state);
     //delay(1000);
   }
@@ -260,22 +296,30 @@ start_time = millis();
 void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   // implement states for different control directions (to wall / away from wall
   sens_x = HC_SR04_range() - 4;
-
+  sens_z = updateAngle();
   //calc error_x based on to wall or away from wall
   switch (run_state) {
     case TOWALL:
       //Serial.println("TO WALL");
       error_x = constrain(sens_x, 0, 9999);
       error_y = 0;
-      error_z = 0;
+      error_z = 0 - sens_z;
       break;
     case AWAYWALL:
       //Serial.println("AWAY WALL");
       error_x = constrain((sens_x - max_x), -9999, 0);
       error_y = 0;
-      error_z = 0;
+      error_z = 0 - sens_z;
       break;
     case NEXTLANE:
+      error_x = 0;
+      error_y = ; // not actually
+      error_z = 0;
+    case FULLSPIN:
+      error_x = 0;
+      error_y = 0; // not actually
+      error_z = 360 - sens_z;
+    case STOP:
       error_x = 0;
       error_y = 0; // not actually
       error_z = 0;
@@ -322,12 +366,12 @@ void calcSpeed() {
 //  Serial.println(" ");
 
   //smooth accell for 1sec via multiplicative approach
-  elasped_time = (millis()-start_time)/1000;
-  if(elasped_time <= 1){
-  speed_array[0][0] *= (1-exp(-5*elasped_time) ); // 5 so reaches full value in 1 sec
-  speed_array[1][0] *= (1-exp(-5*elasped_time) );
-  speed_array[2][0] *= (1-exp(-5*elasped_time) );
-  speed_array[3][0] *= (1-exp(-5*elasped_time) );
+  accel_elasped_time = (millis()-accel_start_time)/1000;
+  if(accel_elasped_time <= 1){
+  speed_array[0][0] *= (1-exp(-5*accel_elasped_time) ); // 5 so reaches full value in 1 sec
+  speed_array[1][0] *= (1-exp(-5*accel_elasped_time) );
+  speed_array[2][0] *= (1-exp(-5*accel_elasped_time) );
+  speed_array[3][0] *= (1-exp(-5*accel_elasped_time) );
 
 //  Serial.print(speed_array[0][0]);
 //  Serial.print(" ");
