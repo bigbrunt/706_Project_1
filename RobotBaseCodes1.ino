@@ -68,6 +68,7 @@ double rw = 0.0275; //wheel radius (m)
 double sens_x = 0; //US signal processed sensor value  for control sys
 double max_x = 100; // max drivable x length
 double error_x = 0;
+double error_y = 0;
 
 // Control sys Arrays
 double speed_array[4][1]; // array of speed values for the motors
@@ -171,7 +172,7 @@ float toCm(int pin, float coeff, float exp) {
   return value;
 }
 
-void turnTo(float currentAngle, float desiredAngle) { 
+void turnTo(float desiredAngle) { 
   lastTime = micros();  // Record the starting time
   float angleDifference = desiredAngle - currentAngle;
 
@@ -192,10 +193,12 @@ void turnTo(float currentAngle, float desiredAngle) {
 
   // Rotate until the current angle is close enough to the desired angle
   while (abs(currentAngle - desiredAngle) > 0.5) {
-    delayMicroseconds(3500);
+    // delayMicroseconds(3500);
+    // serialOutput(0, 0, currentAngle);
 
     // Time calculation (in seconds)
     // updates current angle
+    delayMicroseconds(3500);
     updateAngle();
   }
   stop();  // Stop the motors when the desired angle is reached
@@ -208,8 +211,8 @@ void findCorner() {
   cw(); // Rotate cw
 
   while (currentAngle <= 360) {
-    
-    delayMicroseconds(15000); // Time (ish) of serialOutput (seems to work)
+    // serialOutput(0,0,currentAngle);
+    delayMicroseconds(3500); // Time (ish) of serialOutput (seems to work)
 
     int currentReading = HC_SR04_range();
     updateAngle();
@@ -231,18 +234,7 @@ void findCorner() {
   int boxLength1 = smallest_dist + dist180;
   int boxLength2 = dist90 + dist270;
 
-  /////////////////////////////////////NEXT TO IMPLEMENT////////////////////////////////////////////////
-  // find the long side of box and turn towards
-  // if(boxLength1>boxLength2){
-  //   // turn towards smallest_dist
-  //   if()
-  // } else{
-  //   // turn towards dist90
-  // }
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  
-
-  ///SERIALLLLLLLLLL CHECKSSSSSSSSSSSSSS////////////////////////////////
+   ///SERIALLLLLLLLLL CHECKSSSSSSSSSSSSSS////////////////////////////////
 
   // serialOutput(0, 0, smallest_dist);
   // serialOutput(0, 0, dist90);
@@ -267,8 +259,47 @@ void findCorner() {
   // Serial.print("270 angle: ");
   // Serial.println(boxMap.get_angle(index270));
 ////////////////////////////////////////////////////////////////////////////////////
-
   stop(); 
+  delay(1000);
+  
+  /////////////////////////////////////NEXT TO IMPLEMENT////////////////////////////////////////////////
+  // find the long side of box and turn towards
+  if(boxLength1>boxLength2){
+    turnTo(boxMap.get_angle(smallest_dist_index));
+  } else{
+    if (dist90 < dist270) {
+      // turn towards dist90
+      turnTo(boxMap.get_angle(index90));
+    } else {
+      // turn to dist270
+      turnTo(boxMap.get_angle(index270));
+    }
+  }
+  goToWall();
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  float leftLIR = l2.read();
+  float rightLIR = l1.read();
+
+  if (leftLIR < rightLIR) {
+    strafe_left();
+    while (s2.read() > 2) {
+
+    }
+  } else {
+    strafe_right();
+    while (s1.read() > 2) {
+
+    }
+  }
+  stop();
+
+
+
+
+
+ 
+
+
 }
 
 //   // Find closest corner
@@ -587,11 +618,11 @@ float HC_SR04_range() {
 
 void goToWall() {
 
-  while (1) {
+  while (error_x > 1) {
     control(1, 0, 0,1);
     calcSpeed();
     move();
-    delay(1000);
+    // delay(100);
   }
 
 
@@ -610,7 +641,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z,bool to_wall) {
                                ? error_x* kp_x
                                : 0;
   control_effort_array[1][0] = (toggle_y)
-                               ? 0
+                               ? error_y * kp_y
                                : 0;
   control_effort_array[2][0] = (toggle_x)
                                ? 0
