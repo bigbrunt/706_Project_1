@@ -22,7 +22,13 @@
 #include <Servo.h>  //Need for Servo pulse output
 #include <SoftwareSerial.h> // For wireless communication
 #include <Arduino.h>
+#include "SensorFilter.h"
 
+// Define Kalman filter instance (Q, R, initial estimate, initial error covariance)
+SensorFilter l1(0.2, 0.5, 0, 1, 2009.4, -0.64, A7);
+SensorFilter l2(0.2, 0.5, 0, 1, 5434.6, -1.006, A5);
+SensorFilter s1(0.2, 0.5, 0, 1, 2324.4, -0.992, A6);
+SensorFilter s2(0.2, 0.5, 0, 1, 2482, -1.033, A4);
 
 // Serial Data input pin
 #define BLUETOOTH_RX 10
@@ -116,6 +122,7 @@ double ki_memory_array[3][1];
 double kp_x = 10;
 double kp_y = 0;
 double kp_z = 20;
+double kp_z_straight = 80;
 double ki_x = 0;
 double ki_y = 0;
 double ki_z = 0.5;
@@ -301,6 +308,7 @@ void goToWall() {
       updateAngle();
       control(1, 0, 1, state);
       delay(10);
+      Serial.print(error_x);
     } while (abs(error_x) > 3);
     stop();
 }
@@ -357,7 +365,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
                                ? error_y * kp_y
                                : 0;
   control_effort_array[2][0] = (toggle_z)
-                               ? error_z * kp_z + sum_error_z * ki_z
+                               ? error_z * kp_z_straight 
                                : 0;
   calcSpeed();
   move();
