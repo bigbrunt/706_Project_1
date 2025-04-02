@@ -25,9 +25,9 @@
 #include "SensorFilter.h"
 
 // Define Kalman filter instance (Q, R, initial estimate, initial error covariance)
-SensorFilter l1(0.2, 0.5, 0, 1, 2009.4, -0.64, A7);
+SensorFilter l1(0.2, 0.5, 0, 1, 2009.4, -0.64, A7); //10-cm - 80cm
 SensorFilter l2(0.2, 0.5, 0, 1, 5434.6, -1.006, A5);
-SensorFilter s1(0.2, 0.5, 0, 1, 2324.4, -0.992, A6);
+SensorFilter s1(0.2, 0.5, 0, 1, 2324.4, -0.992, A6); //4cm - 40
 SensorFilter s2(0.2, 0.5, 0, 1, 2482, -1.033, A4);
 
 // Serial Data input pin
@@ -92,6 +92,7 @@ float angularVelocity = 0;
 enum State {
   TOWALL,
   AWAYWALL,
+  FIRSTLANE,
   NEXTLANE,
   FULLSPIN,
   STOP
@@ -106,8 +107,10 @@ double rw = 0.0275; //wheel radius (m)
 double sens_x = 0; //US signal processed sensor value  for control sys
 double sens_y = 0;
 double sens_z = 0; // angle
-double max_x = 100; // max drivable x length m
-double target_lane = 40; // m
+double max_x = 40; // max drivable x length m
+int current_lane = 0;
+
+// error
 double error_x = 0;
 double error_y = 0;
 double error_z = 0;
@@ -120,9 +123,9 @@ double ki_memory_array[3][1];
 
 // CONTROL GAIN VALUES
 double kp_x = 10;
-double kp_y = 0;
-double kp_z = 20;
-double kp_z_straight = 80;
+double kp_y = 10;
+double kp_z = 30;
+// double kp_z_straight = 40;
 double ki_x = 0;
 double ki_y = 0;
 double ki_z = 0.5;
@@ -175,11 +178,12 @@ void setup(void) {
 
 void loop(void)  //main loop
 {
-
+  
   if (is_battery_voltage_OK) {
     enable_motors();
-    goToWall();
+    plow();
   }
+  while(1){}
 }
 
 boolean is_battery_voltage_OK() {
@@ -301,16 +305,101 @@ void updateAngle() {
 
 }
 
-void goToWall() {
+void plow() {
+    
+    // plow lane 0
+    accel_start_time = millis();
+    do  {
+      current_lane = 0;
+      State state = FIRSTLANE;
+      updateAngle();
+      control(0, 1, 1, state);
+      delay(10);
+      
+    } while (abs(error_y) > 1);
+    stop();
+    delay(200);
+
     accel_start_time = millis();
     do  {
       State state = TOWALL;
       updateAngle();
       control(1, 0, 1, state);
       delay(10);
-      Serial.print(error_x);
     } while (abs(error_x) > 3);
     stop();
+    delay(200);
+
+    // plow lane 1
+    accel_start_time = millis();
+    do  {
+      current_lane = 1;
+      State state = NEXTLANE;
+      updateAngle();
+      control(0, 1, 0, state);
+      delay(10);
+      
+    } while (abs(error_y) > 1);
+    stop();
+    delay(200);
+
+    accel_start_time = millis();
+    do  {
+      State state = AWAYWALL;
+      updateAngle();
+      control(1, 0, 1, state);
+      delay(10);
+    } while (abs(error_x) > 3);
+    stop();
+    delay(200);
+
+  // plow lane 2
+    accel_start_time = millis();
+    do  {
+      current_lane = 2;
+      State state = NEXTLANE;
+      updateAngle();
+      control(0, 1, 0, state);
+      delay(10);
+      
+    } while (abs(error_y) > 1);
+    stop();
+    delay(200);
+
+      accel_start_time = millis();
+    do  {
+      State state = TOWALL;
+      updateAngle();
+      control(1, 0, 1, state);
+      delay(10);
+    } while (abs(error_x) > 3);
+    stop();
+    delay(200);
+
+  // plow lane 3
+    accel_start_time = millis();
+    do  {
+      current_lane = 3;
+      State state = NEXTLANE;
+      updateAngle();
+      control(0, 1, 0, state);
+      delay(10);
+      
+    } while (abs(error_y) > 1);
+    stop();
+    delay(200);
+
+    accel_start_time = millis();
+    do  {
+      State state = AWAYWALL;
+      updateAngle();
+      control(1, 0, 1, state);
+      delay(10);
+    } while (abs(error_x) > 3);
+    stop();
+
+    // done
+
 }
 
 
@@ -335,10 +424,27 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
       error_y = 0;
       error_z = 0 + sens_z;
       break;
-    case NEXTLANE:
+    case FIRSTLANE:
       error_x = 0;
-      error_y = target_lane - sens_y; // need to update target lane
-      error_z = 0;
+      error_y = s2.read() - 8; // errror =0 when sense = 8 // not actually
+      error_z = 0 + sens_z;
+      break;
+    case NEXTLANE:
+      if(current_lane == 1){
+        error_x = 0;
+        error_y = l2.read() - 38; // need to update target lane
+        error_z = 0 + sens_z;
+      }
+      if(current_lane == 2){
+        error_x = 0;
+        error_y = l2.read() - 68; // need to update target lane
+        error_z = 0 + sens_z;
+      }
+      if(current_lane == 3){
+        error_x = 0;
+        error_y = s1.read() - 8; // need to update target lane
+        error_z = 0 + sens_z;
+      }
       break;
     case FULLSPIN:
       error_x = 0;
@@ -365,7 +471,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
                                ? error_y * kp_y
                                : 0;
   control_effort_array[2][0] = (toggle_z)
-                               ? error_z * kp_z_straight 
+                               ? error_z * kp_z 
                                : 0;
   calcSpeed();
   move();
@@ -406,8 +512,8 @@ void calcSpeed() {
   //smooth accell for 1sec via multiplicative approach
   accel_elasped_time = (millis() - accel_start_time) / 1000;
   
-  Serial.print(accel_elasped_time);
-  Serial.print(" ");
+  // Serial.print(accel_elasped_time);
+  // Serial.print(" ");
     if (accel_elasped_time <= 2) {
       speed_array[0][0] *= (1 - exp(-2.0 * accel_elasped_time) ); // 5 so reaches full value in 1 sec
       speed_array[1][0] *= (1 - exp(-2.0 * accel_elasped_time) );
@@ -415,14 +521,14 @@ void calcSpeed() {
       speed_array[3][0] *= (1 - exp(-2.0 * accel_elasped_time) );
     }
 
-  Serial.print(speed_array[0][0]);
-  Serial.print(" ");
-  Serial.print(speed_array[1][0]);
-  Serial.print(" ");
-  Serial.print(speed_array[2][0]);
-  Serial.print(" ");
-  Serial.print(speed_array[3][0]);
-  Serial.println(" ");
+  // Serial.print(speed_array[0][0]);
+  // Serial.print(" ");
+  // Serial.print(speed_array[1][0]);
+  // Serial.print(" ");
+  // Serial.print(speed_array[2][0]);
+  // Serial.print(" ");
+  // Serial.print(speed_array[3][0]);
+  // Serial.println(" ");
 
 }
 
@@ -432,10 +538,6 @@ void move() {
   left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
   right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
   right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
-  //  left_front_motor.writeMicroseconds(1500 + 100);
-  //  left_rear_motor.writeMicroseconds(1500 + 100);
-  //  right_rear_motor.writeMicroseconds(1500 - 100);
-  //  right_front_motor.writeMicroseconds(1500 - 100);
 }
 
 
