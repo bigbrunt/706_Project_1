@@ -67,14 +67,16 @@ Servo turret_motor;
 const int gyroPin = A3;
 int sensorValue = 0;
 float gyroSupplyVoltage = 5;
-float gyroZeroVoltage = 0;      // Voltage when not rotating
+float gyroZeroVoltage = 0; // Voltage when not rotating
+float gyroVoltage = 0;
 float gyroSensitivity = 0.007;  // Taken from data sheets
 float rotationThreshold = 3;    // For gyro drift correction
 float gyroRate = 0;
 float currentAngle = 0;
-
-//timing
 unsigned long angle_lastTime = 0;
+unsigned long angle_currentTime = 0;
+float angle_deltaTime = 0;
+float angularVelocity = 0;
 
 
 
@@ -96,11 +98,14 @@ double rw = 0.0275; //wheel radius (m)
 
 //MISC
 double sens_x = 0; //US signal processed sensor value  for control sys
-double sens_z = 0; // angle 
-double max_x = 100; // max drivable x length
+double sens_y = 0;
+double sens_z = 0; // angle
+double max_x = 100; // max drivable x length m
+double target_lane = 40; // m
 double error_x = 0;
 double error_y = 0;
 double error_z = 0;
+double sum_error_z = 0;
 
 // Control sys Arrays
 double speed_array[4][1]; // array of speed values for the motors
@@ -108,17 +113,17 @@ double control_effort_array[3][1]; // array of xyz control efforts from pid cont
 double ki_memory_array[3][1];
 
 // CONTROL GAIN VALUES
-double kp_x = 0.75;
+double kp_x = 10;
 double kp_y = 0;
-double kp_z = 2;
+double kp_z = 20;
 double ki_x = 0;
 double ki_y = 0;
-double ki_z = 0;
+double ki_z = 0.5;
 double power_lim = 700; // max vex motor power
 
 //timing
-uint32_t accel_start_time = 0;
-uint32_t accel_elasped_time = 0;
+double accel_start_time = 0;
+double accel_elasped_time = 0;
 
 
 // initial speed value (for serial movement control)
@@ -138,7 +143,7 @@ void setup(void) {
   delay(1000);
   SerialCom->println("Setup....");
 
-  
+
   turret_motor.attach(11);
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -146,20 +151,29 @@ void setup(void) {
   pinMode(TRIG_PIN, OUTPUT);
   digitalWrite(TRIG_PIN, LOW);
 
-  
+  // Gyro initializing (drift calc..?)
+  float sum = 0;
+  for (int i = 0; i < 100; i++) {
+    sensorValue = analogRead(gyroPin);
+    sum += sensorValue;
+    delay(5);
+  }
+  gyroZeroVoltage = sum / 100;
+
+
   SerialCom->println("Running in 3...");
   delay(3000);
-  
+
 }
 
 void loop(void)  //main loop
 {
-  if(is_battery_voltage_OK){
-  enable_motors();
-  goToWall();
+
+  if (is_battery_voltage_OK) {
+    enable_motors();
+    goToWall();
   }
 }
-
 
 boolean is_battery_voltage_OK() {
   static byte Low_voltage_counter;
@@ -261,129 +275,146 @@ float HC_SR04_range() {
   }
 }
 
-float updateAngle() {
-     // Time calculation (in seconds)
-    unsigned long angle_currentTime = micros();
-    float angle_deltaTime = (angle_currentTime - angle_lastTime) / 1e6;  // Convert µs to seconds
-    angle_lastTime = angle_currentTime;
+void updateAngle() {
+  // Time calculation (in seconds)
+  angle_currentTime = micros();
+  angle_deltaTime = (angle_currentTime - angle_lastTime) / 1e6;  // Convert µs to seconds
+  angle_lastTime = angle_currentTime;
 
-    // Read gyro and calculate angular velocity
-    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1027.0);
-    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+  // Read gyro and calculate angular velocity
+  gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+  gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1027.0);
+  angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
 
-    // Update angle (integrate angular velocity)
-    if (abs(angularVelocity) > rotationThreshold) {
-      currentAngle += angularVelocity * angle_deltaTime;  // θ = ∫ω dt
-      return currentAngle;
-    } 
-    
-}
+  // Update angle (integrate angular velocity)
+  if (abs(angularVelocity) > rotationThreshold) {
+    currentAngle += angularVelocity * angle_deltaTime;  // θ = ∫ω dt
 
-
-void goToWall() {
-accel_start_time = millis();
-  while (1) {
-    State state = TOWALL;
-    control(1, 0, 0, state);
-    //delay(1000);
   }
 
+}
 
+void goToWall() {
+    accel_start_time = millis();
+    do  {
+      State state = TOWALL;
+      updateAngle();
+      control(1, 0, 1, state);
+      delay(10);
+    } while (abs(error_x) > 3);
+    stop();
 }
 
 
 void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   // implement states for different control directions (to wall / away from wall
-  sens_x = HC_SR04_range() - 4;
-  sens_z = updateAngle();
+  sens_x = HC_SR04_range() - 4; //conv to m
+  sens_y = 0;
+  sens_z = currentAngle;
+
+
   //calc error_x based on to wall or away from wall
   switch (run_state) {
     case TOWALL:
       //Serial.println("TO WALL");
       error_x = constrain(sens_x, 0, 9999);
       error_y = 0;
-      error_z = 0 - sens_z;
+      error_z = 0 + sens_z;
       break;
     case AWAYWALL:
       //Serial.println("AWAY WALL");
       error_x = constrain((sens_x - max_x), -9999, 0);
       error_y = 0;
-      error_z = 0 - sens_z;
+      error_z = 0 + sens_z;
       break;
     case NEXTLANE:
       error_x = 0;
-      error_y = ; // not actually
+      error_y = target_lane - sens_y; // need to update target lane
       error_z = 0;
+      break;
     case FULLSPIN:
       error_x = 0;
       error_y = 0; // not actually
-      error_z = 360 - sens_z;
+      error_z = 360 + sens_z;
+      break;
     case STOP:
       error_x = 0;
       error_y = 0; // not actually
       error_z = 0;
       break;
-      
+  }
 
+  //ki_z
+  if (error_z < 10) {
+    sum_error_z += error_z;
   }
 
   // calc control efforts
   control_effort_array[0][0] = (toggle_x)
-                               ? error_x * kp_x 
+                               ? error_x * kp_x
                                : 0;
   control_effort_array[1][0] = (toggle_y)
                                ? error_y * kp_y
                                : 0;
   control_effort_array[2][0] = (toggle_z)
-                               ? error_z * kp_z
+                               ? error_z * kp_z + sum_error_z * ki_z
                                : 0;
-
-  ki_memory_array[0][0] += control_effort_array[0][0];
-  ki_memory_array[1][0] += control_effort_array[1][0];
-  ki_memory_array[2][0] += control_effort_array[2][0];
-
-  //  Serial.println(HC_SR04_range());
-  //Serial.println(control_effort_array[0][0]);
-
   calcSpeed();
   move();
 }
 
 void calcSpeed() {
-  speed_array[0][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
-  speed_array[1][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
-  speed_array[2][0] =  constrain( (1 / rw) * (control_effort_array[0][0] - control_effort_array[1][0] + ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
-  speed_array[3][0] =  constrain( (1 / rw) * (control_effort_array[0][0] + control_effort_array[1][0] - ((lx + ly) * control_effort_array[2][0])), -power_lim, power_lim);
-//  Serial.print(speed_array[0][0]);
-//  Serial.print(" ");
-//  Serial.print(speed_array[1][0]);
-//  Serial.print(" ");
-//  Serial.print(speed_array[2][0]);
-//  Serial.print(" ");
-//  Serial.print(speed_array[3][0]);
-//  Serial.print(" ");
-//  Serial.println(" ");
+
+  // proitize power for spin correction
+  double available_power = power_lim - abs(control_effort_array[2][0]);
+  // Prevent negative available power (in case rotation alone exceeds limit)
+  available_power = max(0.0, available_power);
+
+  // Compute total speed-related correction demand
+  double speed_correction_total = abs(control_effort_array[0][0]) + abs(control_effort_array[1][0]);
+
+  // Compute scaling factor for speed corrections
+  double speed_scaling_factor = (speed_correction_total > available_power)
+                                ? available_power / speed_correction_total
+                                : 1.0;
+
+  // Apply scaling to speed corrections only
+  control_effort_array[0][0] *= speed_scaling_factor;
+  control_effort_array[1][0] *= speed_scaling_factor;
+
+  
+  speed_array[0][0] =  control_effort_array[0][0] - control_effort_array[1][0] - control_effort_array[2][0];
+  speed_array[1][0] =  control_effort_array[0][0] + control_effort_array[1][0] +  control_effort_array[2][0];
+  speed_array[2][0] =  control_effort_array[0][0] - control_effort_array[1][0] +  control_effort_array[2][0];
+  speed_array[3][0] =  control_effort_array[0][0] + control_effort_array[1][0] -  control_effort_array[2][0];
+
+  // Apply constraints to ensure motor speeds stay within limits
+  speed_array[0][0] = constrain(speed_array[0][0], -power_lim, power_lim);
+  speed_array[1][0] = constrain(speed_array[1][0], -power_lim, power_lim);
+  speed_array[2][0] = constrain(speed_array[2][0], -power_lim, power_lim);
+  speed_array[3][0] = constrain(speed_array[3][0], -power_lim, power_lim);
+
 
   //smooth accell for 1sec via multiplicative approach
-  accel_elasped_time = (millis()-accel_start_time)/1000;
-  if(accel_elasped_time <= 1){
-  speed_array[0][0] *= (1-exp(-5*accel_elasped_time) ); // 5 so reaches full value in 1 sec
-  speed_array[1][0] *= (1-exp(-5*accel_elasped_time) );
-  speed_array[2][0] *= (1-exp(-5*accel_elasped_time) );
-  speed_array[3][0] *= (1-exp(-5*accel_elasped_time) );
+  accel_elasped_time = (millis() - accel_start_time) / 1000;
+  
+  Serial.print(accel_elasped_time);
+  Serial.print(" ");
+    if (accel_elasped_time <= 2) {
+      speed_array[0][0] *= (1 - exp(-2.0 * accel_elasped_time) ); // 5 so reaches full value in 1 sec
+      speed_array[1][0] *= (1 - exp(-2.0 * accel_elasped_time) );
+      speed_array[2][0] *= (1 - exp(-2.0 * accel_elasped_time) );
+      speed_array[3][0] *= (1 - exp(-2.0 * accel_elasped_time) );
+    }
 
-//  Serial.print(speed_array[0][0]);
-//  Serial.print(" ");
-//  Serial.print(speed_array[1][0]);
-//  Serial.print(" ");
-//  Serial.print(speed_array[2][0]);
-//  Serial.print(" ");
-//  Serial.print(speed_array[3][0]);
-//  Serial.print(" ");
-//  Serial.println(" ");
-//  Serial.println(" ");
-  }
+  Serial.print(speed_array[0][0]);
+  Serial.print(" ");
+  Serial.print(speed_array[1][0]);
+  Serial.print(" ");
+  Serial.print(speed_array[2][0]);
+  Serial.print(" ");
+  Serial.print(speed_array[3][0]);
+  Serial.println(" ");
 
 }
 
