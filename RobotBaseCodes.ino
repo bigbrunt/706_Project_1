@@ -95,6 +95,7 @@ enum State {
   FIRSTLANE,
   NEXTLANE,
   FULLSPIN,
+  ALIGN,
   STOP
 };
 
@@ -107,7 +108,7 @@ double rw = 0.0275; //wheel radius (m)
 double sens_x = 0; //US signal processed sensor value  for control sys
 double sens_y = 0;
 double sens_z = 0; // angle
-double max_x = 40; // max drivable x length m
+double max_x = 170; // max drivable x length m
 int current_lane = 0;
 
 // error
@@ -124,12 +125,12 @@ double ki_memory_array[3][1];
 // CONTROL GAIN VALUES
 double kp_x = 10;
 double kp_y = 10;
-double kp_z = 30;
+double kp_z = 50;
 // double kp_z_straight = 40;
 double ki_x = 0;
 double ki_y = 0;
-double ki_z = 0.5;
-double power_lim = 700; // max vex motor power
+double ki_z = 5;
+double power_lim = 500; // max vex motor power
 
 //timing
 double accel_start_time = 0;
@@ -182,6 +183,7 @@ void loop(void)  //main loop
   if (is_battery_voltage_OK) {
     enable_motors();
     plow();
+    
   }
   while(1){}
 }
@@ -294,7 +296,7 @@ void updateAngle() {
 
   // Read gyro and calculate angular velocity
   gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-  gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1027.0);
+  gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1025.0); //1027.0
   angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
 
   // Update angle (integrate angular velocity)
@@ -305,97 +307,89 @@ void updateAngle() {
 
 }
 
+void controlReset(){
+  currentAngle =0;
+  sum_error_z = 0;
+  accel_start_time = millis();
+  
+  
+}
 void plow() {
+
     
-    // plow lane 0
-    accel_start_time = millis();
+    // ------------------  plow lane 0  ---------------
+    controlReset();
+    
     do  {
       current_lane = 0;
       State state = FIRSTLANE;
       updateAngle();
-      control(0, 1, 1, state);
-      delay(10);
-      
+      control(0, 1, 0, state);
     } while (abs(error_y) > 1);
-    stop();
-    delay(200);
-
-    accel_start_time = millis();
+    
+    controlReset();
+    
     do  {
       State state = TOWALL;
       updateAngle();
       control(1, 0, 1, state);
-      delay(10);
-    } while (abs(error_x) > 3);
-    stop();
-    delay(200);
+    } while (abs(error_x) > 1);
 
-    // plow lane 1
-    accel_start_time = millis();
+    // --------------- plow lane 1  -----------------
+
+    controlReset();
+    
     do  {
       current_lane = 1;
       State state = NEXTLANE;
       updateAngle();
-      control(0, 1, 0, state);
-      delay(10);
-      
-    } while (abs(error_y) > 1);
-    stop();
-    delay(200);
-
-    accel_start_time = millis();
+      control(0, 1, 0, state);      
+    } while (abs(error_y) > 1); 
+    
+    controlReset();
+    
     do  {
       State state = AWAYWALL;
       updateAngle();
       control(1, 0, 1, state);
-      delay(10);
-    } while (abs(error_x) > 3);
-    stop();
-    delay(200);
+    } while (abs(error_x) > 1);
 
-  // plow lane 2
-    accel_start_time = millis();
+  // --------------  plow lane 2  -----------------
+    controlReset();
+    
     do  {
       current_lane = 2;
       State state = NEXTLANE;
       updateAngle();
-      control(0, 1, 0, state);
-      delay(10);
-      
+      control(0, 1, 0, state);      
     } while (abs(error_y) > 1);
-    stop();
-    delay(200);
-
-      accel_start_time = millis();
+    
+    controlReset();
+      
     do  {
       State state = TOWALL;
       updateAngle();
       control(1, 0, 1, state);
-      delay(10);
-    } while (abs(error_x) > 3);
-    stop();
-    delay(200);
+    } while (abs(error_x) > 1);
 
-  // plow lane 3
-    accel_start_time = millis();
+  // -------------    plow lane 3  ----------------------
+    controlReset();
+    
     do  {
       current_lane = 3;
       State state = NEXTLANE;
       updateAngle();
       control(0, 1, 0, state);
-      delay(10);
-      
     } while (abs(error_y) > 1);
-    stop();
-    delay(200);
-
-    accel_start_time = millis();
+    
+    controlReset();
+    
     do  {
       State state = AWAYWALL;
       updateAngle();
       control(1, 0, 1, state);
-      delay(10);
-    } while (abs(error_x) > 3);
+    } while (abs(error_x) > 1);
+
     stop();
 
     // done
@@ -449,8 +443,13 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
     case FULLSPIN:
       error_x = 0;
       error_y = 0; // not actually
-      error_z = 360 + sens_z;
+      error_z = 0 + sens_z;
       break;
+    case ALIGN:
+      error_x = 0;
+      error_y = 0; // not actually
+      error_z = 0 + sens_z;
+    break;
     case STOP:
       error_x = 0;
       error_y = 0; // not actually
@@ -459,7 +458,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   }
 
   //ki_z
-  if (error_z < 10) {
+  if (error_z < 3) {
     sum_error_z += error_z;
   }
 
@@ -471,7 +470,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
                                ? error_y * kp_y
                                : 0;
   control_effort_array[2][0] = (toggle_z)
-                               ? error_z * kp_z 
+                               ? error_z * kp_z + sum_error_z*ki_z +50
                                : 0;
   calcSpeed();
   move();
