@@ -1,31 +1,30 @@
 #include "SensorFilter.h"
 
 // Define Kalman filter instance (Q, R, initial estimate, initial error covariance)
-SensorFilter kf(0.01, 5, 0, 1);
+SensorFilter kf(0.5, 5, 0, 1, 3123, -0.9, A7);
+SensorFilter test(0.5, 5, 0, 1, 1, 1, A7);
 
 void setup() {
     Serial.begin(115200);
 }
 
 void loop() {
-    // Read raw sensor value
-    int rawValue = analogRead(A4);
-    
-    // Convert raw value to distance (assuming Sharp GP2Y0A21YK0F)
-    float voltage = rawValue * (5.0 / 1023.0);
-    // Prevent division by zero by ensuring voltage is never zero
-    if (voltage < 0.01) voltage = 0.01;
-    float distance = 27.86 * pow(voltage, -1.15);
 
+    int rawValue = analogRead(A7);
+    int filteredADC = test.read();
+    float distance = 3123 * pow(rawValue, -0.9);
     // Apply Kalman filter
-    float filteredDistance = kf.update(distance);
+    float filteredDistance = kf.read();
 
     // Print results
-    Serial.print("Raw Distance: ");
-    Serial.print(distance);
-    Serial.print(" cm\tKalman Estimate: ");
+    Serial.print(filteredADC);
+        // Print results
+    Serial.print("\t");
+    Serial.print (distance);
+    Serial.print("\tKalman Estimate: ");
     Serial.print(filteredDistance);
     Serial.println(" cm");
 
     delay(100); // Adjust based on required update frequency
 }
+
