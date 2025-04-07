@@ -1,51 +1,41 @@
-/*
-  MechEng 706 Base Code
-
-  This code provides basic movement and sensor reading for the MechEng 706 Mecanum Wheel Robot Project
-
-  Hardware:
-    Arduino Mega2560 https://www.arduino.cc/en/Guide/ArduinoMega2560
-    MPU-9250 https://www.sparkfun.com/products/13762
-    Ultrasonic Sensor - HC-SR04 https://www.sparkfun.com/products/13959
-    Infrared Proximity Sensor - Sharp https://www.sparkfun.com/products/242
-    Infrared Proximity Sensor Short Range - Sharp https://www.sparkfun.com/products/12728
-    Servo - Generic (Sub-Micro Size) https://www.sparkfun.com/products/9065
-    Vex Motor Controller 29 https://www.vexrobotics.com/276-2193.html
-    Vex Motors https://www.vexrobotics.com/motors.html
-    Turnigy nano-tech 2200mah 2S https://hobbyking.com/en_us/turnigy-nano-tech-2200mah-2s-25-50c-lipo-pack.html
-
-  Date: 11/11/2016
-  Author: Logan Stuart
-  Modified: 15/02/2018
-  Author: Logan Stuart
-*/
-#include <Servo.h>  //Need for Servo pulse output
-#include <SoftwareSerial.h> // For wireless communication
+#include <Servo.h>           //Need for Servo pulse output
+#include <SoftwareSerial.h>  // For wireless communication
 #include <Arduino.h>
 #include "SensorFilter.h"
+#include "vector.h"
 
 // Define Kalman filter instance (Q, R, initial estimate, initial error covariance)
-SensorFilter l1(0.2, 0.5, 0, 1, 2009.4, -0.64, A7); //10-cm - 80cm
+SensorFilter l1(0.2, 0.5, 0, 1, 16705, -1.22, A9);
 SensorFilter l2(0.2, 0.5, 0, 1, 5434.6, -1.006, A5);
-SensorFilter s1(0.2, 0.5, 0, 1, 2324.4, -0.992, A6); //4cm - 40
+SensorFilter s1(0.2, 0.5, 0, 1, 1625.2, -0.899, A8);
 SensorFilter s2(0.2, 0.5, 0, 1, 2482, -1.033, A4);
 
-// Serial Data input pin
-#define BLUETOOTH_RX 10
-// Serial Data output pin
-#define BLUETOOTH_TX 11
+// intialise the vector for the box mapping
+Vector2D boxMap = Vector2D();
 
+// Gyro stuff
+const int gyroPin = A3;
+int sensorValue = 0;
+float gyroSupplyVoltage = 5;
+float gyroZeroVoltage = 0;      // Voltage when not rotating
+float gyroSensitivity = 0.007;  // Taken from data sheets
+float rotationThreshold = 1.5;    // For gyro drift correction// ? ***
+float gyroRate = 0;
+float currentAngle = 0;
+unsigned long lastTime = 0;
+
+
+#define BLUETOOTH_RX 10 // Serial Data input pin
+#define BLUETOOTH_TX 11 // Serial Data output pin
 // USB Serial Port
 #define OUTPUTMONITOR 0
 #define OUTPUTPLOTTER 0
-
 // Bluetooth Serial Port
 #define OUTPUTBLUETOOTHMONITOR 1
 
 //#define NO_READ_GYRO  //Uncomment of GYRO is not attached.
 //#define NO_HC-SR04 //Uncomment of HC-SR04 ultrasonic ranging sensor is not attached.
 //#define NO_BATTERY_V_OK //Uncomment of BATTERY_V_OK if you do not care about battery damage.
-
 
 //Refer to Shield Pinouts.jpg for pin locations
 
@@ -55,7 +45,6 @@ const byte left_rear = 47;
 const byte right_rear = 50;
 const byte right_front = 51;
 
-
 //Default ultrasonic ranging sensor pins, these pins are defined my the Shield
 const int TRIG_PIN = 48;
 const int ECHO_PIN = 49;
@@ -64,29 +53,11 @@ const int ECHO_PIN = 49;
 const unsigned int MAX_DIST = 23200;
 
 Servo left_front_motor;   // create servo object to control Vex Motor Controller 29
-Servo left_rear_motor;   // create servo object to control Vex Motor Controller 29
-Servo right_rear_motor;  // create servo object to control Vex Motor Controller 29
+Servo left_rear_motor;    // create servo object to control Vex Motor Controller 29
+Servo right_rear_motor;   // create servo object to control Vex Motor Controller 29
 Servo right_front_motor;  // create servo object to control Vex Motor Controller 29
 Servo turret_motor;
 
-/* ----------------------------------------------- GRYO ---------------------------------------------- */
-const int gyroPin = A3;
-int sensorValue = 0;
-float gyroSupplyVoltage = 5;
-float gyroZeroVoltage = 0; // Voltage when not rotating
-float gyroVoltage = 0;
-float gyroSensitivity = 0.007;  // Taken from data sheets
-float rotationThreshold = 3;    // For gyro drift correction
-float gyroRate = 0;
-float currentAngle = 0;
-unsigned long angle_lastTime = 0;
-unsigned long angle_currentTime = 0;
-float angle_deltaTime = 0;
-float angularVelocity = 0;
-
-
-
-/* ----------------------------------------------- ---- ---------------------------------------------- */
 /* ----------------------------------------------- CONTROL SYS ---------------------------------------------- */
 //State machine states
 enum State {
@@ -108,7 +79,7 @@ double rw = 0.0275; //wheel radius (m)
 double sens_x = 0; //US signal processed sensor value  for control sys
 double sens_y = 0;
 double sens_z = 0; // angle
-double max_x = 170; // max drivable x length m
+double max_x = 165; // max drivable x length m
 int current_lane = 0;
 
 // error
@@ -123,9 +94,9 @@ double control_effort_array[3][1]; // array of xyz control efforts from pid cont
 double ki_memory_array[3][1];
 
 // CONTROL GAIN VALUES
-double kp_x = 10;
-double kp_y = 10;
-double kp_z = 50;
+double kp_x = 15;
+double kp_y = 25;
+double kp_z = 40;
 // double kp_z_straight = 40;
 double ki_x = 0;
 double ki_y = 0;
@@ -143,18 +114,14 @@ int speed_val = 100;
 
 //Serial Pointer for USB com
 HardwareSerial *SerialCom;
+
+int pos = 0;
+
+volatile int32_t Counter = 1;  // Used to delay serial outputs
+
 SoftwareSerial BluetoothSerial(BLUETOOTH_RX, BLUETOOTH_TX);
 
-
 void setup(void) {
-  // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
-  SerialCom = &Serial;
-  SerialCom->begin(115200);
-  SerialCom->println("MECHENG706_Base_Code_25/01/2018");
-  delay(1000);
-  SerialCom->println("Setup....");
-
-
   turret_motor.attach(11);
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -162,31 +129,241 @@ void setup(void) {
   pinMode(TRIG_PIN, OUTPUT);
   digitalWrite(TRIG_PIN, LOW);
 
-  // Gyro initializing (drift calc..?)
+  // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
+  SerialCom = &Serial;
+  SerialCom->begin(115200);
+  SerialCom->println("MECHENG706_Base_Code_25/01/2018");
+  delay(1000);
+  SerialCom->println("Setup....");
+
+  BluetoothSerial.begin(115200);
+
+  //delay(1000);  //settling time but no really needed
+
+  // Gyro stuff
+  int i;
   float sum = 0;
-  for (int i = 0; i < 100; i++) {
+  for (i = 0; i < 100; i++) {
     sensorValue = analogRead(gyroPin);
     sum += sensorValue;
     delay(5);
   }
   gyroZeroVoltage = sum / 100;
 
+  // Needed to get the robot moving
+  left_front_motor.attach(left_front);
+  left_rear_motor.attach(left_rear);
+  right_front_motor.attach(right_front);
+  right_rear_motor.attach(right_rear);
 
-  SerialCom->println("Running in 3...");
-  delay(3000);
-
+  // findCorner();
 }
 
 void loop(void)  //main loop
 {
-  
-  if (is_battery_voltage_OK) {
-    enable_motors();
+     l1.read();
+     l2.read();
+     s1.read();
+     s2.read();
+    //  delay(500);
+    //  Serial.println(l2_data);
+    
+    // forward();
+    // float range = HC_SR04_range();
+    // while(range > 5){
+    //   serialOutput(2,2,range);
+    //   range = HC_SR04_range();
+    // }
+   
+    // stop();
+    // delay(1000);
+   
     plow();
+    while(1){}
+    //goToWall();
+};
+
+void updateSensors() {
+    l1.read();
+    l2.read();
+    s1.read();
+    s2.read();
+}
+
+
+void updateAngle() {
+     // Time calculation (in seconds)
+    unsigned long currentTime = micros();
+    float deltaTime = (currentTime - lastTime) / 1e6;  // Convert µs to seconds
+    lastTime = currentTime;
+
+    // Read gyro and calculate angular velocity
+    float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
+    float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1025.0);
+    float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
+
+    // Update angle (integrate angular velocity)
+    if (abs(angularVelocity) > rotationThreshold) {
+      currentAngle += angularVelocity * deltaTime;  // θ = ∫ω dt
+    } 
+}
+
+void turnTo(float desiredAngle) { 
+  lastTime = micros();  // Record the starting time
+  float angleDifference = desiredAngle - currentAngle;
+
+  // Normalize the angle difference to be within -180 to 180 degrees
+  if (angleDifference > 180) {
+    angleDifference -= 360;
+  } else if (angleDifference < -180) {
+    angleDifference += 360;
+  }
+
+  // If the angle difference is positive, rotate clockwise (cw)
+  // If the angle difference is negative, rotate counterclockwise (acw)
+  if (angleDifference > 0) {
+    cw();  // Rotate clockwise
+  } else {
+    ccw();  // Rotate counterclockwise
+  }
+
+  // Rotate until the current angle is close enough to the desired angle
+  while (abs(currentAngle - desiredAngle) > 0.5) {
+    // delayMicroseconds(3500);
+    // serialOutput(0, 0, currentAngle);
+
+    // Time calculation (in seconds)
+    // updates current angle
+    delayMicroseconds(3500);
+    updateAngle();
+    updateSensors();
+  }
+  stop();  // Stop the motors when the desired angle is reached
+  delay(1000); // For now
+}
+
+// charlies magnum XL func
+void findCorner() {
+  
+  lastTime = micros();  // Record the starting time
+  cw(); // Rotate cw
+
+  float step = 0.5;
+
+  while (currentAngle <= 360) {
+    // serialOutput(0,0,currentAngle);
+    // delayMicroseconds(3500); // Time (ish) of serialOutput (seems to work)
+    // Delay needs to be the right size to fill the vector
+
+    int currentReading = HC_SR04_range();
+    updateAngle();
+    if ((currentAngle - step) > 0.5) {
+      boxMap.insert_pair(currentAngle, currentReading);
+      step += 1;
+    }
+
+    updateSensors();
+    // delay(100); // Think we are overflowing the vector without a delay (may need to trial/error for this value)
     
   }
-  while(1){}
+
+  currentAngle = 0;
+
+  stop();
+  delay(1000);
+
+  // get indexs of of walls
+  size_t smallest_dist_index = boxMap.get_index_of_smallest_distance();
+  size_t index90 = boxMap.find_angle_offset_from_index(smallest_dist_index, 90);
+  size_t index180 = boxMap.find_angle_offset_from_index(smallest_dist_index, 180);
+  size_t index270 = boxMap.find_angle_offset_from_index(smallest_dist_index, 270);
+
+  // // get distances
+  int smallest_dist = boxMap.get_distance(smallest_dist_index);
+  int dist90 = boxMap.get_distance(index90);
+  int dist180 = boxMap.get_distance(index180);
+  int dist270 = boxMap.get_distance(index270);
+
+  int boxLength1 = smallest_dist + dist180;
+  int boxLength2 = dist90 + dist270;
+
+   ///SERIALLLLLLLLLL CHECKSSSSSSSSSSSSSS////////////////////////////////
+
+  serialOutput(0, 0, smallest_dist);
+  serialOutput(0, 0, dist90);
+  serialOutput(0, 0, dist180);
+  serialOutput(0, 0, dist270); 
+
+  // serialOutput(0, 0, smallest_dist_index);
+  // serialOutput(0, 0, index90);
+  // serialOutput(0, 0, index180);
+  // serialOutput(0, 0, index270); 
+
+  // Serial.println("Stored angles:");
+  //   for (size_t i = 0; i < boxMap.length(); i++) {
+  //   Serial.print(boxMap.get_angle(i));
+  //   Serial.print(" ");
+  // }
+  // Serial.println(" ");
+  // Serial.print("0 angle: ");
+  // Serial.println(boxMap.get_angle(smallest_dist_index));
+
+  // Serial.print("90 angle: ");
+  // Serial.println(boxMap.get_angle(index90));
+
+  // Serial.print("180 angle: ");
+  // Serial.println(boxMap.get_angle(index180));
+
+  // Serial.print("270 angle: ");
+  // Serial.println(boxMap.get_angle(index270));
+
+  // find the long side of box and turn towards
+  if(boxLength1>boxLength2){
+    // Turn to the 90 or 180 wall, which ever is closest
+    turnTo(boxMap.get_angle(smallest_dist_index));
+  } else {
+    // Turn to smallest reading
+    // turnTo(boxMap.get_angle(smallest_dist_index));
+    if (dist90 < dist270) {
+      turnTo(boxMap.get_angle(index90));
+    } else {
+      turnTo(boxMap.get_angle(index270));
+    }
+  }
+  
+  forward();
+  while ( HC_SR04_range() > 3) {
+    // Continue
+  }
+
+  stop();
+  delay(1000);
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  float leftLIR = l2.read();
+  float rightLIR = l1.read(); // Hopefully these both give valid readings
+
+  if (leftLIR < rightLIR) {
+    strafe_left();
+    while (s2.read() > 3) {
+      // Keep going
+      updateAngle();
+      updateSensors();
+    }
+  } else {
+    strafe_right();
+    while (s1.read() > 3) {
+      // Keep going
+      updateAngle();
+      updateSensors();
+    }
+  }
+  stop();
+  delay(1000);
 }
+
+
+
 
 boolean is_battery_voltage_OK() {
   static byte Low_voltage_counter;
@@ -232,6 +409,8 @@ boolean is_battery_voltage_OK() {
   }
 }
 
+
+
 float HC_SR04_range() {
   unsigned long t1;
   unsigned long t2;
@@ -250,7 +429,7 @@ float HC_SR04_range() {
     t2 = micros();
     pulse_width = t2 - t1;
     if (pulse_width > (MAX_DIST + 1000)) {
-      SerialCom->println("HC-SR04: NOT found");
+      // SerialCom->println("HC-SR04: NOT found");
       return -1;
     }
   }
@@ -263,7 +442,7 @@ float HC_SR04_range() {
     t2 = micros();
     pulse_width = t2 - t1;
     if (pulse_width > (MAX_DIST + 1000)) {
-      SerialCom->println("HC-SR04: Out of range");
+      // SerialCom->println("HC-SR04: Out of range");
       return -1;
     }
   }
@@ -279,43 +458,22 @@ float HC_SR04_range() {
 
   // Print out results
   if (pulse_width > MAX_DIST) {
-    SerialCom->println("HC-SR04: Out of range");
+    // SerialCom->println("HC-SR04: Out of range");
   } else {
-    //        SerialCom->print("HC-SR04:");
-    //        SerialCom->print(cm);
-    //        SerialCom->println("cm");
+    // SerialCom->print("HC-SR04:");
+    // SerialCom->print(cm);
+    // SerialCom->println("cm");
     return cm;
   }
 }
 
-void updateAngle() {
-  // Time calculation (in seconds)
-  angle_currentTime = micros();
-  angle_deltaTime = (angle_currentTime - angle_lastTime) / 1e6;  // Convert µs to seconds
-  angle_lastTime = angle_currentTime;
-
-  // Read gyro and calculate angular velocity
-  gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-  gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1025.0); //1027.0
-  angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
-
-  // Update angle (integrate angular velocity)
-  if (abs(angularVelocity) > rotationThreshold) {
-    currentAngle += angularVelocity * angle_deltaTime;  // θ = ∫ω dt
-
-  }
-
-}
-
 void controlReset(){
-  currentAngle =0;
+  
   sum_error_z = 0;
   accel_start_time = millis();
-  
-  
 }
 void plow() {
-
+    // serialOutput(0,0,HC_SR04_range());
     
     // ------------------  plow lane 0  ---------------
     controlReset();
@@ -325,6 +483,7 @@ void plow() {
       State state = FIRSTLANE;
       updateAngle();
       control(0, 1, 0, state);
+      serialOutput(0,0,currentAngle);
     } while (abs(error_y) > 1);
     
     controlReset();
@@ -333,6 +492,8 @@ void plow() {
       State state = TOWALL;
       updateAngle();
       control(1, 0, 1, state);
+      // serialOutput(1,1,HC_SR04_range());
+      serialOutput(1, 1,currentAngle);
     } while (abs(error_x) > 1);
 
     // --------------- plow lane 1  -----------------
@@ -343,7 +504,8 @@ void plow() {
       current_lane = 1;
       State state = NEXTLANE;
       updateAngle();
-      control(0, 1, 0, state);      
+      control(0, 1, 0, state);  
+      serialOutput(2, 2,currentAngle);    
     } while (abs(error_y) > 1); 
     
     controlReset();
@@ -352,6 +514,7 @@ void plow() {
       State state = AWAYWALL;
       updateAngle();
       control(1, 0, 1, state);
+      serialOutput(3, 3,currentAngle);
     } while (abs(error_x) > 1);
 
   // --------------  plow lane 2  -----------------
@@ -407,16 +570,69 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   //calc error_x based on to wall or away from wall
   switch (run_state) {
     case TOWALL:
-      //Serial.println("TO WALL");
+    if(current_lane == 0){
+        //Serial.println("TO WALL");
       error_x = constrain(sens_x, 0, 9999);
-      error_y = 0;
+      error_y = s2.read() - 8;
       error_z = 0 + sens_z;
+      }
+      if(current_lane == 1){
+        //Serial.println("TO WALL");
+      error_x = constrain(sens_x, 0, 9999);
+      error_y = l2.read() - 28;
+      error_z = 0 + sens_z;
+      }
+      if(current_lane == 2){
+        //Serial.println("TO WALL");
+      error_x = constrain(sens_x, 0, 9999);
+      error_y = l2.read() - 48;
+      error_z = 0 + sens_z;
+      }
+      if(current_lane == 3){
+        //Serial.println("TO WALL");
+      error_x = constrain(sens_x, 0, 9999);
+      error_y = l1.read() - 28;
+      error_z = 0 + sens_z;
+      }
+      if(current_lane == 4){
+        //Serial.println("TO WALL");
+      error_x = constrain(sens_x, 0, 9999);
+      error_y = s1.read() - 8;
+      error_z = 0 + sens_z;
+      }
+      
       break;
     case AWAYWALL:
-      //Serial.println("AWAY WALL");
+      if(current_lane == 0){
+        //Serial.println("TO WALL");
       error_x = constrain((sens_x - max_x), -9999, 0);
-      error_y = 0;
+      error_y = s2.read() - 8;
       error_z = 0 + sens_z;
+      }
+      if(current_lane == 1){
+        //Serial.println("TO WALL");
+      error_x = constrain((sens_x - max_x), -9999, 0);
+      error_y = l2.read() - 28;
+      error_z = 0 + sens_z;
+      }
+      if(current_lane == 2){
+        //Serial.println("TO WALL");
+      error_x = constrain((sens_x - max_x), -9999, 0);
+      error_y = l2.read() - 48;
+      error_z = 0 + sens_z;
+      }
+      if(current_lane == 3){
+        //Serial.println("TO WALL");
+      error_x = constrain((sens_x - max_x), -9999, 0);
+      error_y = l1.read() - 28;
+      error_z = 0 + sens_z;
+      }
+      if(current_lane == 4){
+        //Serial.println("TO WALL");
+      error_x = constrain((sens_x - max_x), -9999, 0);
+      error_y = s1.read() - 8;
+      error_z = 0 + sens_z;
+      }
       break;
     case FIRSTLANE:
       error_x = 0;
@@ -426,15 +642,20 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
     case NEXTLANE:
       if(current_lane == 1){
         error_x = 0;
-        error_y = l2.read() - 38; // need to update target lane
+        error_y = l2.read() - 28; // need to update target lane
         error_z = 0 + sens_z;
       }
       if(current_lane == 2){
         error_x = 0;
-        error_y = l2.read() - 68; // need to update target lane
+        error_y = l2.read() - 48; // need to update target lane
         error_z = 0 + sens_z;
       }
       if(current_lane == 3){
+        error_x = 0;
+        error_y = l1.read() - 28; // need to update target lane
+        error_z = 0 + sens_z;
+      }
+      if(current_lane == 4){
         error_x = 0;
         error_y = s1.read() - 8; // need to update target lane
         error_z = 0 + sens_z;
@@ -443,7 +664,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
     case FULLSPIN:
       error_x = 0;
       error_y = 0; // not actually
-      error_z = 0 + sens_z;
+      error_z = 90 + sens_z;
       break;
     case ALIGN:
       error_x = 0;
@@ -470,7 +691,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
                                ? error_y * kp_y
                                : 0;
   control_effort_array[2][0] = (toggle_z)
-                               ? error_z * kp_z + sum_error_z*ki_z +50
+                               ? error_z * kp_z + sum_error_z*ki_z
                                : 0;
   calcSpeed();
   move();
@@ -537,7 +758,13 @@ void move() {
   left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
   right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
   right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
+//  left_front_motor.writeMicroseconds(1500 + 100);
+//  left_rear_motor.writeMicroseconds(1500 + 100);
+//  right_rear_motor.writeMicroseconds(1500 - 100);
+//  right_front_motor.writeMicroseconds(1500 - 100);
 }
+
+
 
 
 //----------------------Motor moments------------------------
@@ -545,8 +772,8 @@ void move() {
 
 void disable_motors() {
   left_front_motor.detach();   // detach the servo on pin left_front to turn Vex Motor Controller 29 Off
-  left_rear_motor.detach();   // detach the servo on pin left_rear to turn Vex Motor Controller 29 Off
-  right_rear_motor.detach();  // detach the servo on pin right_rear to turn Vex Motor Controller 29 Off
+  left_rear_motor.detach();    // detach the servo on pin left_rear to turn Vex Motor Controller 29 Off
+  right_rear_motor.detach();   // detach the servo on pin right_rear to turn Vex Motor Controller 29 Off
   right_front_motor.detach();  // detach the servo on pin right_front to turn Vex Motor Controller 29 Off
 
   pinMode(left_front, INPUT);
@@ -557,8 +784,8 @@ void disable_motors() {
 
 void enable_motors() {
   left_front_motor.attach(left_front);    // attaches the servo on pin left_front to turn Vex Motor Controller 29 On
-  left_rear_motor.attach(left_rear);     // attaches the servo on pin left_rear to turn Vex Motor Controller 29 On
-  right_rear_motor.attach(right_rear);   // attaches the servo on pin right_rear to turn Vex Motor Controller 29 On
+  left_rear_motor.attach(left_rear);      // attaches the servo on pin left_rear to turn Vex Motor Controller 29 On
+  right_rear_motor.attach(right_rear);    // attaches the servo on pin right_rear to turn Vex Motor Controller 29 On
   right_front_motor.attach(right_front);  // attaches the servo on pin right_front to turn Vex Motor Controller 29 On
 }
 void stop()  //Stop
