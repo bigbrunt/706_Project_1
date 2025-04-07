@@ -5,7 +5,7 @@
 #include "vector.h"
 
 // Define Kalman filter instance (Q, R, initial estimate, initial error covariance)
-SensorFilter l1(0.2, 0.5, 0, 1, 16705, -1.22, A9);
+SensorFilter l1(0.2, 0.5, 0, 1, 3400,-0.85, A9);
 SensorFilter l2(0.2, 0.5, 0, 1, 5434.6, -1.006, A5);
 SensorFilter s1(0.2, 0.5, 0, 1, 1625.2, -0.899, A8);
 SensorFilter s2(0.2, 0.5, 0, 1, 2482, -1.033, A4);
@@ -94,13 +94,13 @@ double control_effort_array[3][1]; // array of xyz control efforts from pid cont
 double ki_memory_array[3][1];
 
 // CONTROL GAIN VALUES
-double kp_x = 15;
-double kp_y = 25;
-double kp_z = 40;
+double kp_x = 15; //15
+double kp_y = 25; //25
+double kp_z = 40; //40
 // double kp_z_straight = 40;
 double ki_x = 0;
 double ki_y = 0;
-double ki_z = 5;
+double ki_z = 5; //5
 double power_lim = 500; // max vex motor power
 
 //timing
@@ -161,13 +161,22 @@ void setup(void) {
 
 void loop(void)  //main loop
 {
-     l1.read();
-     l2.read();
-     s1.read();
-     s2.read();
-    //  delay(500);
-    //  Serial.println(l2_data);
-    
+    //  l1.read();
+    //  l2.read();
+    //  s1.read();
+    //  s2.read();
+    serialOutput(0,0,l2.read());
+
+    // delay(500);
+    // //  Serial.println(l2_data);
+    // do  {
+    //   State state = TOWALL;
+    //   updateAngle();
+    //   control(1, 1, 0, state);
+    //   // serialOutput(1,1,HC_SR04_range());
+    //   serialOutput(1, 1,currentAngle);
+    // } while (abs(error_x) > 1);
+    // while(1){};
     // forward();
     // float range = HC_SR04_range();
     // while(range > 5){
@@ -177,9 +186,18 @@ void loop(void)  //main loop
    
     // stop();
     // delay(1000);
-   
-    plow();
-    while(1){}
+    controlReset();
+    
+    do  {
+      current_lane = 0;
+      State state = FULLSPIN;
+      updateAngle();
+      control(0, 0, 1, state);
+    } while (1);
+    stop();
+    delay(1000);
+    //plow();
+    // while(1){}
     //goToWall();
 };
 
@@ -363,8 +381,6 @@ void findCorner() {
 }
 
 
-
-
 boolean is_battery_voltage_OK() {
   static byte Low_voltage_counter;
   static unsigned long previous_millis;
@@ -474,6 +490,10 @@ void controlReset(){
 }
 void plow() {
     // serialOutput(0,0,HC_SR04_range());
+    // forward();
+    // while (1) {
+    //   serialOutput(0, 0, HC_SR04_range());
+    // }
     
     // ------------------  plow lane 0  ---------------
     controlReset();
@@ -482,21 +502,28 @@ void plow() {
       current_lane = 0;
       State state = FIRSTLANE;
       updateAngle();
-      control(0, 1, 0, state);
+      control(0, 1, 1, state);
       serialOutput(0,0,currentAngle);
     } while (abs(error_y) > 1);
+    stop();
+    delay(1000);
+
+    
     
     controlReset();
     
     do  {
       State state = TOWALL;
       updateAngle();
-      control(1, 0, 1, state);
+      control(1, 1, 1, state);
       // serialOutput(1,1,HC_SR04_range());
       serialOutput(1, 1,currentAngle);
     } while (abs(error_x) > 1);
 
-    // --------------- plow lane 1  -----------------
+    stop();
+    delay(1000);
+  while(1){};
+//    --------------- plow lane 1  -----------------
 
     controlReset();
     
@@ -504,18 +531,23 @@ void plow() {
       current_lane = 1;
       State state = NEXTLANE;
       updateAngle();
-      control(0, 1, 0, state);  
+      control(0, 1, 1, state);  
       serialOutput(2, 2,currentAngle);    
     } while (abs(error_y) > 1); 
+    stop();
+    delay(1000);
     
     controlReset();
     
-    do  {
-      State state = AWAYWALL;
-      updateAngle();
-      control(1, 0, 1, state);
-      serialOutput(3, 3,currentAngle);
-    } while (abs(error_x) > 1);
+    // do  {
+    //   State state = AWAYWALL;
+    //   updateAngle();
+    //   control(1, 0, 1, state);
+    //   serialOutput(3, 3,currentAngle);
+    // } while (abs(error_x) > 1);
+
+    // stop();
+    // delay(1000);
 
   // --------------  plow lane 2  -----------------
     controlReset();
@@ -524,16 +556,18 @@ void plow() {
       current_lane = 2;
       State state = NEXTLANE;
       updateAngle();
-      control(0, 1, 0, state);      
+      control(0, 1, 1, state);      
     } while (abs(error_y) > 1);
+    stop();
+    delay(1000);
     
-    controlReset();
+    // controlReset();
       
-    do  {
-      State state = TOWALL;
-      updateAngle();
-      control(1, 0, 1, state);
-    } while (abs(error_x) > 1);
+    // do  {
+    //   State state = TOWALL;
+    //   updateAngle();
+    //   control(1, 0, 1, state);
+    // } while (abs(error_x) > 1);
 
   // -------------    plow lane 3  ----------------------
     controlReset();
@@ -542,17 +576,27 @@ void plow() {
       current_lane = 3;
       State state = NEXTLANE;
       updateAngle();
-      control(0, 1, 0, state);
+      control(0, 1, 1, state);
     } while (abs(error_y) > 1);
+    stop();
+    delay(1000);
     
-    controlReset();
+    // controlReset();
     
-    do  {
-      State state = AWAYWALL;
-      updateAngle();
-      control(1, 0, 1, state);
-    } while (abs(error_x) > 1);
+    // do  {
+    //   State state = AWAYWALL;
+    //   updateAngle();
+    //   control(1, 0, 1, state);
+    // } while (abs(error_x) > 1);
 
+     do  {
+      current_lane = 4;
+      State state = NEXTLANE;
+      updateAngle();
+      control(0, 1, 1, state);
+    } while (abs(error_y) > 1);
+
+  
     stop();
 
     // done
@@ -562,8 +606,8 @@ void plow() {
 
 void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   // implement states for different control directions (to wall / away from wall
-  sens_x = HC_SR04_range() - 4; //conv to m
-  sens_y = 0;
+  sens_y = HC_SR04_range() - 8; //conv to m
+  sens_x = 0;
   sens_z = currentAngle;
 
 
@@ -572,96 +616,97 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
     case TOWALL:
     if(current_lane == 0){
         //Serial.println("TO WALL");
-      error_x = constrain(sens_x, 0, 9999);
-      error_y = s2.read() - 8;
+      error_x = s2.read() - 4; 
+      error_y = sens_y;
       error_z = 0 + sens_z;
       }
-      if(current_lane == 1){
-        //Serial.println("TO WALL");
-      error_x = constrain(sens_x, 0, 9999);
-      error_y = l2.read() - 28;
-      error_z = 0 + sens_z;
-      }
-      if(current_lane == 2){
-        //Serial.println("TO WALL");
-      error_x = constrain(sens_x, 0, 9999);
-      error_y = l2.read() - 48;
-      error_z = 0 + sens_z;
-      }
-      if(current_lane == 3){
-        //Serial.println("TO WALL");
-      error_x = constrain(sens_x, 0, 9999);
-      error_y = l1.read() - 28;
-      error_z = 0 + sens_z;
-      }
-      if(current_lane == 4){
-        //Serial.println("TO WALL");
-      error_x = constrain(sens_x, 0, 9999);
-      error_y = s1.read() - 8;
-      error_z = 0 + sens_z;
-      }
+      // if(current_lane == 1){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain(sens_x, 0, 9999);
+      // error_y = l2.read() - 28;
+      // error_z = 0 + sens_z;
+      // }
+      // if(current_lane == 2){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain(sens_x, 0, 9999);
+      // error_y = l2.read() - 48;
+      // error_z = 0 + sens_z;
+      // }
+      // if(current_lane == 3){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain(sens_x, 0, 9999);
+      // error_y = l1.read() - 28;
+      // error_z = 0 + sens_z;
+      // }
+      // if(current_lane == 4){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain(sens_x, 0, 9999);
+      // error_y = s1.read() - 8;
+      // error_z = 0 + sens_z;
+      // }
       
       break;
     case AWAYWALL:
-      if(current_lane == 0){
-        //Serial.println("TO WALL");
-      error_x = constrain((sens_x - max_x), -9999, 0);
-      error_y = s2.read() - 8;
-      error_z = 0 + sens_z;
-      }
+      // if(current_lane == 0){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain((sens_x - max_x), -9999, 0);
+      // error_y = s2.read() - 8;
+      // error_z = 0 + sens_z;
+      // }
       if(current_lane == 1){
         //Serial.println("TO WALL");
-      error_x = constrain((sens_x - max_x), -9999, 0);
-      error_y = l2.read() - 28;
+      error_x = s1.read() -4;
+      error_y = 28 - constrain(sens_x, 0, 9999);
       error_z = 0 + sens_z;
       }
-      if(current_lane == 2){
-        //Serial.println("TO WALL");
-      error_x = constrain((sens_x - max_x), -9999, 0);
-      error_y = l2.read() - 48;
-      error_z = 0 + sens_z;
-      }
-      if(current_lane == 3){
-        //Serial.println("TO WALL");
-      error_x = constrain((sens_x - max_x), -9999, 0);
-      error_y = l1.read() - 28;
-      error_z = 0 + sens_z;
-      }
-      if(current_lane == 4){
-        //Serial.println("TO WALL");
-      error_x = constrain((sens_x - max_x), -9999, 0);
-      error_y = s1.read() - 8;
-      error_z = 0 + sens_z;
-      }
+      // if(current_lane == 2){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain((sens_x - max_x), -9999, 0);
+      // error_y = l2.read() - 48;
+      // error_z = 0 + sens_z;
+      // }
+      // if(current_lane == 3){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain((sens_x - max_x), -9999, 0);
+      // error_y = l1.read() - 28;
+      // error_z = 0 + sens_z;
+      // }
+      // if(current_lane == 4){
+      //   //Serial.println("TO WALL");
+      // error_x = constrain((sens_x - max_x), -9999, 0);
+      // error_y = s1.read() - 8;
+      // error_z = 0 + sens_z;
+      // }
       break;
     case FIRSTLANE:
       error_x = 0;
-      error_y = s2.read() - 8; // errror =0 when sense = 8 // not actually
+      error_y =  - constrain(sens_x, 0, 9999) ; // errror =0 when sense = 8 // not actually
       error_z = 0 + sens_z;
       break;
     case NEXTLANE:
       if(current_lane == 1){
         error_x = 0;
-        error_y = l2.read() - 28; // need to update target lane
+        error_y =  20 - constrain(sens_x, 0, 9999); // need to update target lane
         error_z = 0 + sens_z;
       }
       if(current_lane == 2){
         error_x = 0;
-        error_y = l2.read() - 48; // need to update target lane
+        error_y = 40 -constrain(sens_x, 0, 9999); // need to update target lane
         error_z = 0 + sens_z;
       }
       if(current_lane == 3){
         error_x = 0;
-        error_y = l1.read() - 28; // need to update target lane
+        error_y = 60 - constrain(sens_x, 0, 9999); // need to update target lane
         error_z = 0 + sens_z;
       }
       if(current_lane == 4){
         error_x = 0;
-        error_y = s1.read() - 8; // need to update target lane
+        error_y = 80 - constrain(sens_x, 0, 9999); // need to update target lane
         error_z = 0 + sens_z;
       }
       break;
     case FULLSPIN:
+    Serial.println(currentAngle);
       error_x = 0;
       error_y = 0; // not actually
       error_z = 90 + sens_z;
@@ -679,7 +724,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   }
 
   //ki_z
-  if (error_z < 3) {
+  if (error_z < 10) {
     sum_error_z += error_z;
   }
 
