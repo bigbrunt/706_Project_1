@@ -14,7 +14,7 @@ SensorFilter s2(0.2, 0.5, 0, 1, 2482, -1.033, A4);
 Vector2D boxMap = Vector2D();
 
 // Gyro stuff
-const int gyroPin = A3;
+const int gyroPin = A2;
 int sensorValue = 0;
 float gyroSupplyVoltage = 5;
 float gyroZeroVoltage = 0;      // Voltage when not rotating
@@ -98,9 +98,9 @@ double ki_memory_array[3][1];
 // CONTROL GAIN VALUES
 double kp_x = 20;
 double kp_y = 60;
-double kp_z = 85;
+double kp_z = 75;
 double ki_z = 0;
-double kd_z = 0;
+double kd_z = 20;
 double power_lim = 400;  // max vex motor power
 
 //timing
@@ -163,20 +163,20 @@ void loop(void)  //main loop
   // current_lane = 0;
   // controlReset();
   // do  {
-  //   State state = TOWALL;
+  //   State state = FULLSPIN;
   //   updateAngle();
-  //   control(1, 1, 1, state);
-  // } while (abs(error_x) > 1);
+  //   control(0, 0, 1, state);
+  // } while (1);
 
 
-  // while(1){
-  //   // updateAngle();
-  //   // Serial.println(currentAngle);
-  //   Serial.print(s2.read());
-  //   Serial.print("          ");
-  //   Serial.println(HC_SR04_range());
-  //   delay(100);
-  // }
+  // // while(1){
+  // //   updateAngle();
+  // //   Serial.println(currentAngle);
+  // //   // Serial.print(s2.read());
+  // //   // Serial.print("          ");
+  // //   // Serial.println(HC_SR04_range());
+  // //   delay(100);
+  // // }
 
   plow();
 
@@ -474,7 +474,7 @@ void controlReset() {
 void plow() {
   // serialOutput(0,0,HC_SR04_range());
 
-  for (int i = 0; i <= 6; i += 2) {
+  for (int i = 0; i < 12; i += 2) {
     current_lane = i;
 
     controlReset();
@@ -493,7 +493,7 @@ void plow() {
       updateAngle();
       control(1, 1, 1, state);
     } while (abs(error_x) > 1);
-
+    
     current_lane = i + 1;
 
     controlReset();
@@ -550,6 +550,7 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
       error_x = 0;
       error_y = 0;  // not actually
       error_z = 90 + sens_z;
+      Serial.println(error_z);
       break;
     case ALIGN:
       error_x = 0;
@@ -617,8 +618,12 @@ void calcSpeed() {
   // Find the maximum absolute value in speed_array
   float maxValue = max(max(abs(speed_array[0][0]), abs(speed_array[1][0])), max(abs(speed_array[2][0]), abs(speed_array[3][0])));
 
+  if(maxValue != 0){
   z = 500.0 / maxValue;
-
+  }
+  else{
+    z =1;
+  }
   // Apply the corrections with the dynamically adjusted z
   speed_array[0][0] -= z * control_effort_array[2][0];
   speed_array[1][0] += z * control_effort_array[2][0];
