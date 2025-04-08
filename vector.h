@@ -5,7 +5,7 @@
 
 class Vector2D {
 private:
-    float data[2][500];  // Fixed 2 rows and 720 columns (angles and distances)
+    float data[2][750];  // Fixed 2 rows and 720 columns (angles and distances)
     size_t index;        // Tracks the number of pairs inserted (columns used)
 
 public:
@@ -14,7 +14,7 @@ public:
 
     // Insert a pair (angle, distance) into the next available index
     void insert_pair(float angle, float distance) {
-        if (index < 500) {  // Ensure we do not exceed the array size
+        if (index < 750) {  // Ensure we do not exceed the array size
             if (distance <= 0) {
                 distance = 300.0;
             }
