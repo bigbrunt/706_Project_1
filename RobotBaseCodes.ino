@@ -95,13 +95,13 @@ double ki_memory_array[3][1];
 
 // CONTROL GAIN VALUES
 double kp_x = 20;
-double kp_y = 25;
+double kp_y = 40;
 double kp_z = 40;
 // double kp_z_straight = 40;
 double ki_x = 0;
 double ki_y = 0;
 double ki_z = 0;
-double power_lim = 500;  // max vex motor power
+double power_lim = 400;  // max vex motor power
 
 //timing
 double accel_start_time = 0;
@@ -168,14 +168,14 @@ void loop(void)  //main loop
   // } while (abs(error_x) > 1);
 
   // } while (1);
-  // while(1){
-  //   // updateAngle();
-  //   // Serial.println(currentAngle);
+  while(1){
+    updateAngle();
+    Serial.println(currentAngle);
   //   Serial.println(HC_SR04_range());
 
-  // }
+  }
 
-  plow();
+  //plow();
 
   while (1) {}
 }
@@ -461,7 +461,10 @@ float HC_SR04_range() {
 }
 
 void controlReset() {
-
+  stop();
+  error_x = 0;
+  error_y = 0;
+  error_z = 0;
   sum_error_z = 0;
   accel_start_time = millis();
 }
@@ -472,6 +475,7 @@ void plow() {
   current_lane = 0;
 
   controlReset();
+  delay(200);
   do {
 
     State state = NEXTLANE;
@@ -480,17 +484,61 @@ void plow() {
   } while (abs(error_y) > 1);
 
   controlReset();
+  delay(200);
   do  {
     State state = TOWALL;
     updateAngle();
     control(1, 1, 1, state);
   } while (abs(error_x) > 1);
 
-  delay(2000);
-  // --------------- plow lane 1  -----------------
+  // // --------------- plow lane 1  -----------------
   current_lane = 1;
 
   controlReset();
+  delay(200);
+  do {
+    State state = NEXTLANE;
+    updateAngle();
+    control(0, 1, 1, state);
+  } while (abs(error_y) > 1);
+  
+  controlReset();
+  delay(200);
+  do  {
+    State state = AWAYWALL;
+    updateAngle();
+    control(1, 1, 1, state);
+  } while (abs(error_x) > 1);
+  
+  // // --------------  plow lane 2  -----------------
+  current_lane = 2;
+
+  controlReset();
+  delay(200);
+  do {
+    State state = NEXTLANE;
+    updateAngle();
+    control(0, 1, 1, state);
+  } while (abs(error_y) > 1);
+  
+  controlReset();
+  delay(200);
+  do  {
+    State state = TOWALL;
+    updateAngle();
+    control(1, 0, 1, state);
+  } while (abs(error_x) > 1);
+
+  while(1){
+    updateAngle();
+    Serial.println(currentAngle);
+    delay(50);
+  }
+  // -------------    plow lane 3  ----------------------
+  current_lane = 3;
+
+  controlReset();
+  delay(200);
   do {
     State state = NEXTLANE;
     updateAngle();
@@ -498,45 +546,33 @@ void plow() {
   } while (abs(error_y) > 1);
 
   controlReset();
+  delay(200);
   do  {
     State state = AWAYWALL;
     updateAngle();
-    control(1, 1, 1, state);
+    control(1, 0, 1, state);
   } while (abs(error_x) > 1);
-  delay(2000);
-  // --------------  plow lane 2  -----------------
-  current_lane = 2;
+
+  // -------------    plow lane 4  ----------------------
+  current_lane = 4;
 
   controlReset();
+  delay(200);
   do {
     State state = NEXTLANE;
     updateAngle();
-    control(0, 1, 0, state);
+    control(0, 1, 1, state);
   } while (abs(error_y) > 1);
 
   controlReset();
+  delay(200);
   do  {
     State state = TOWALL;
     updateAngle();
     control(1, 0, 1, state);
   } while (abs(error_x) > 1);
-  delay(2000);
-  // -------------    plow lane 3  ----------------------
-   current_lane = 3;
 
-  controlReset();
-  do {
-    State state = NEXTLANE;
-    updateAngle();
-    control(0, 1, 0, state);
-  } while (abs(error_y) > 1);
 
-  controlReset();
-  do  {
-    State state = AWAYWALL;
-    updateAngle();
-    control(1, 0, 1, state);
-  } while (abs(error_x) > 1);
 
   stop();
 
@@ -676,42 +712,55 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
                                  ? error_y * kp_y
                                  : 0;
   control_effort_array[2][0] = (toggle_z)
-                                 ? error_z * kp_z + sum_error_z * ki_z
+                                 ? error_z * kp_z// + sum_error_z * ki_z
                                  : 0;
   calcSpeed();
   move();
+
+  delay(25);
 }
 
 void calcSpeed() {
   double z = 3;
   double y = 1.5;
-  double cor_scale;
-  // proitize power for spin correction
-  double speed_correction_total = abs(control_effort_array[1][0]) + abs(control_effort_array[2][0]);
-  double available_power = power_lim - speed_correction_total;
+  double w = 0.4;
+  double cor_scale = 2;
+//   // proitize power for spin correction
+//   double speed_correction_total = abs(control_effort_array[1][0]) + abs(control_effort_array[2][0]);
+//   double available_power = power_lim - speed_correction_total;
 
-  // Prevent negative available power (in case rotation alone exceeds limit)
-  available_power = max(0.0, available_power);
+//   // Prevent negative available power (in case rotation alone exceeds limit)
+//   available_power = max(0.0, available_power);
 
-  // Compute scaling factor for speed corrections
-  double speed_scaling_factor = (control_effort_array[0][0] > available_power)
-                                  ? available_power / control_effort_array[0][0]
-                                  : 1.0;
+//   // Compute scaling factor for speed corrections
+//   double speed_scaling_factor = (control_effort_array[0][0] > available_power)
+//                                   ? available_power / control_effort_array[0][0]
+//                                   : 1.0;
 
-  // Apply scaling to speed corrections only
-  control_effort_array[0][0] *= speed_scaling_factor;
+//   // Apply scaling to speed corrections only
+//   control_effort_array[0][0] *= speed_scaling_factor;
 
-if(control_effort_array[0][0] < 80 && control_effort_array[0][0] >5){
-  cor_scale = 1/available_power * control_effort_array[0][0];
-}
-else {
-  cor_scale = 1;
-}
+// if(control_effort_array[0][0] < 60 && control_effort_array[0][0] >15){
+//   // cor_scale = 1/available_power * control_effort_array[0][0];
+// }
+// else {
+//   cor_scale = 1;
+// }
 
-  speed_array[0][0] = control_effort_array[0][0] + cor_scale * (- y * control_effort_array[1][0] - z * control_effort_array[2][0]);
-  speed_array[1][0] = control_effort_array[0][0] + cor_scale * (+ y * control_effort_array[1][0] + z * control_effort_array[2][0]);
-  speed_array[2][0] = control_effort_array[0][0] + cor_scale * (- y * control_effort_array[1][0] + z * control_effort_array[2][0]);
-  speed_array[3][0] = control_effort_array[0][0] + cor_scale * (+ y * control_effort_array[1][0] - z * control_effort_array[2][0]);
+
+
+  // speed_array[0][0] = control_effort_array[0][0] + cor_scale * (- y * control_effort_array[1][0] - z * control_effort_array[2][0]);
+  // speed_array[1][0] = control_effort_array[0][0] + cor_scale * (+ y * control_effort_array[1][0] + z * control_effort_array[2][0]);
+  // speed_array[2][0] = control_effort_array[0][0] + cor_scale * (- y * control_effort_array[1][0] + z * control_effort_array[2][0]);
+  // speed_array[3][0] = control_effort_array[0][0] + cor_scale * (+ y * control_effort_array[1][0] - z * control_effort_array[2][0]);
+
+  control_effort_array[0][0] = constrain(control_effort_array[0][0],-400,400);
+
+  speed_array[0][0] = control_effort_array[0][0] + cor_scale * (- w * control_effort_array[1][0] - (1-w) * control_effort_array[2][0]);
+  speed_array[1][0] = control_effort_array[0][0] + cor_scale * (+ w * control_effort_array[1][0] + (1-w) * control_effort_array[2][0]);
+  speed_array[2][0] = control_effort_array[0][0] + cor_scale * (- w * control_effort_array[1][0] + (1-w) * control_effort_array[2][0]);
+  speed_array[3][0] = control_effort_array[0][0] + cor_scale * (+ w * control_effort_array[1][0] - (1-w) * control_effort_array[2][0]); 
+
 
   // Apply constraints to ensure motor speeds stay within limits
   speed_array[0][0] = constrain(speed_array[0][0], -700, 700);
