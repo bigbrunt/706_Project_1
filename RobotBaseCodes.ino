@@ -25,6 +25,8 @@ float currentAngle = 0;
 unsigned long lastTime = 0;
 float desiredAngle = 0;
 
+double mapping[10][2];
+
 
 #define BLUETOOTH_RX 10  // Serial Data input pin
 #define BLUETOOTH_TX 11  // Serial Data output pin
@@ -92,12 +94,12 @@ double speed_array[4][1];           // array of speed values for the motors
 double control_effort_array[3][1];  // array of xyz control efforts from pid controlers
 
 // CONTROL GAIN VALUES
-double kp_x = 20;
+double kp_x = 40;
 double kp_y = 60;
-double kp_z = 30;
-double ki_z = 0.2;
-double kd_z = 5;
-double power_lim = 700;  // max vex motor power
+double kp_z = 40;
+double ki_z = 5;
+double kd_z = 100;
+double power_lim = 500;  // max vex motor power
 
 //timing
 double accel_start_time = 0;
@@ -110,6 +112,7 @@ int speed_val = 200;
 
 //Serial Pointer for USB com
 HardwareSerial *SerialCom;
+
 SoftwareSerial BluetoothSerial(BLUETOOTH_RX, BLUETOOTH_TX);
 
 void setup(void) {
@@ -120,16 +123,10 @@ void setup(void) {
   pinMode(TRIG_PIN, OUTPUT);
   digitalWrite(TRIG_PIN, LOW);
 
-
-
   // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
   SerialCom = &Serial;
   SerialCom->begin(115200);
-  SerialCom->println("MECHENG706_Base_Code_25/01/2018");
-  delay(1000);
-  SerialCom->println("Setup....");
-
-  BluetoothSerial.begin(115200);
+  SerialCom->println("SETUP");
 
   // Gyro Calibration
   pinMode(gyroPin, INPUT);
@@ -151,7 +148,26 @@ void setup(void) {
 void loop(void)  //main loop
 {
 
+  //  do {
+  //       State state = ALIGN;
+  //       updateAngle();
+  //       control(0, 0, 0, state);
+  //       Serial.println(currentAngle);
+  //     } while (1);
+  //     stop();
+ 
   findCorner();
+
+  double align_millis = millis();
+  controlReset();
+      do {
+        State state = ALIGN;
+        updateAngle();
+        control(0, 0, 1, state);
+        Serial.println(currentAngle);
+      } while ( (align_millis+1000) > millis() && abs(error_z) < 0.8 );
+      stop();
+  
 
   // get direction
   if (s1.read() < s2.read()) {
@@ -160,11 +176,9 @@ void loop(void)  //main loop
     plow(0);
   }
 
+  printMap();
+
   while (1) {
-  // left_front_motor.writeMicroseconds(1500 + 400);
-  // left_rear_motor.writeMicroseconds(1500 - 400);
-  // right_rear_motor.writeMicroseconds(1500 - 400);
-  // right_front_motor.writeMicroseconds(1500 + 400);
   }
 }
 
@@ -177,7 +191,7 @@ void updateAngle() {
 
   // Read gyro and calculate angular velocity
   float gyroVoltage = (analogRead(gyroPin) * gyroSupplyVoltage) / 1023.0;
-  float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023);
+  float gyroRate = gyroVoltage - (gyroZeroVoltage * gyroSupplyVoltage / 1023.0);
   float angularVelocity = gyroRate / gyroSensitivity;  // °/s from datasheet
 
   // Update angle (integrate angular velocity)
@@ -271,36 +285,40 @@ void findCorner() {
   }
 
   currentAngle = 0;
-  delay(25);
 
+  //zero angle against wall
   controlReset();
+  accel_start_time = 3.5;
   do {
     State state = NEXTLANE;
     updateAngle();
     control(0, 1, 1, state);
   } while (abs(error_y) > 1); 
+  left_front_motor.writeMicroseconds(1500 + 400);
+  left_rear_motor.writeMicroseconds(1500 - 400);
+  right_rear_motor.writeMicroseconds(1500 - 500);
+  right_front_motor.writeMicroseconds(1500 + 400);
+  delay(200);
+  left_front_motor.writeMicroseconds(1500 + 400);
+  left_rear_motor.writeMicroseconds(1500 - 400);
+  right_rear_motor.writeMicroseconds(1500 - 0);
+  right_front_motor.writeMicroseconds(1500 + 0);
+  delay(200);
   left_front_motor.writeMicroseconds(1500 + 200);
   left_rear_motor.writeMicroseconds(1500 - 200);
-  right_rear_motor.writeMicroseconds(1500 - 200);
-  right_front_motor.writeMicroseconds(1500 + 200);
-  delay(1500);
-  currentAngle = 0;
+  right_rear_motor.writeMicroseconds(1500 - 0);
+  right_front_motor.writeMicroseconds(1500 + 0);
+  delay(100);
+    left_front_motor.writeMicroseconds(1500 + 100);
+  left_rear_motor.writeMicroseconds(1500 - 100);
+  right_rear_motor.writeMicroseconds(1500 - 0);
+  right_front_motor.writeMicroseconds(1500 + 0);
+  delay(100);
+  stop();
+  currentAngle = -2;
+  delay(300);
   
-  controlReset();
-  do {
-    State state = NEXTLANE;
-    updateAngle();
-    control(0, 1, 1, state);
-  } while (abs(error_y) > 1); 
-  controlReset();
-  currentAngle -=3;
-  do {
-    State state = ALIGN;
-    updateAngle();
-    control(0, 0, 1, state);
-  } while (abs(error_z) > 1); 
-
-
+  // figuire out and go to closest wall on X axis
   controlReset();
   if (dist90 > dist270 && turn_flag == 1) {
     do {
@@ -451,15 +469,22 @@ void plow(bool direction) {
   // move foward first
   if (direction) {
     for (int i = 0; i < 10; i += 2) {
-      delay(200);
+      
       current_lane = i;
+
       controlReset();
+      accel_start_time = 3.5;
       do {
         State state = NEXTLANE;
         updateAngle();
         control(0, 1, 1, state);
 
       } while (abs(error_y) > 1);
+
+      //GET Y START DIST
+      mapping[i][0] = HC_SR04_range();
+
+      currentAngle -= 1;
 
       controlReset();
       do {
@@ -468,35 +493,52 @@ void plow(bool direction) {
         control(1, 1, 1, state);
       } while (abs(error_x) > 1);
 
-      current_lane = i + 1;
-      delay(200);
-      controlReset();
-      do {
+      //GET Y END DIST
+      mapping[i][1] = HC_SR04_range();
+      //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
+      //OUTPUT LANE NUMBER AND ^^^ DATA
 
+      current_lane = i + 1;
+     
+      controlReset();
+      accel_start_time = 3.5;
+      do {
         State state = NEXTLANE;
         updateAngle();
         control(0, 1, 1, state);
       } while (abs(error_y) > 1);
 
+      //GET Y START DIST
+      mapping[i][0] = HC_SR04_range();
+
+      currentAngle -= 1;  //correct for drift
+
       controlReset();
-      currentAngle -= 2;  //correct for drift
       do {
         State state = AWAYWALL;
         updateAngle();
         control(1, 1, 1, state);
       } while (abs(error_x) > 1);
+      //GET Y END DIST
+      mapping[i][0] = HC_SR04_range();
+      //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
+      //OUTPUT LANE NUMBER AND ^^^ DATA
     }
   } else {  //move back first
     for (int i = 0; i < 10; i += 2) {
-      delay(200);
       current_lane = i;
+
       controlReset();
+      accel_start_time = 3.5;
       do {
         State state = NEXTLANE;
         updateAngle();
         control(0, 1, 1, state);
 
       } while (abs(error_y) > 1);
+
+      //GET Y START DIST
+      currentAngle -= 1;
 
       controlReset();
       do {
@@ -505,34 +547,43 @@ void plow(bool direction) {
         control(1, 1, 1, state);
       } while (abs(error_x) > 1);
 
-      current_lane = i + 1;
-      delay(200);
-      controlReset();
-      do {
+      //GET Y END DIST
+      //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
+      //OUTPUT LANE NUMBER AND ^^^ DATA
 
+      current_lane = i + 1;
+     
+      controlReset();
+      accel_start_time = 3.5;
+      do {
         State state = NEXTLANE;
         updateAngle();
         control(0, 1, 1, state);
       } while (abs(error_y) > 1);
 
+      //GET Y START DIST
+
+      currentAngle -= 1;  //correct for drift
+
       controlReset();
-      currentAngle -= 2;  //correct for drift
       do {
         State state = TOWALL;
         updateAngle();
         control(1, 1, 1, state);
       } while (abs(error_x) > 1);
+      //GET Y END DIST
+      //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
+      //OUTPUT LANE NUMBER AND ^^^ DATA
     }
   }
 }
-
-
 
 void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   // implement states for different control directions (to wall / away from wall
   sens_x = 0;
   sens_y = HC_SR04_range() - 8;
   sens_z = currentAngle;
+  Serial.println(currentAngle);
 
 
   //calc error_x based on to wall or away from wall
@@ -580,8 +631,11 @@ void control(bool toggle_x, bool toggle_y, bool toggle_z, State run_state) {
   }
 
   //ki_z
-  if (error_z < 30) {
+  if (abs(error_z) < 15) {
     sum_error_z += error_z;
+  }
+  else{
+    sum_error_z = 0;
   }
 
   //kd_z
@@ -621,12 +675,15 @@ void calcSpeed() {
 
   //scale Y control to still compensate when robot is moving
   if (abs(control_effort_array[0][0]) != 0) {
-    y = 1.0 * abs(control_effort_array[0][0]) / power_lim;
+    y = 2 * abs(control_effort_array[0][0]) / power_lim;
+    control_effort_array[1][0] *= y;
   } else {
-    y = 1;
+    y = 0.8;
+    control_effort_array[1][0] *= y;
+    control_effort_array[1][0] = constrain(control_effort_array[1][0],-200,200); // constrain y when only strafing to avoid overshoot
   }
 
-  control_effort_array[1][0] *= y;
+  
 
   // Check if the sum exceeds powerlim
   if (controlEffortSum > power_lim) {
@@ -646,7 +703,7 @@ void calcSpeed() {
 
   //scale Z control to still compensate when robot is moving
   if (maxValue != 0) {
-    z = 1.2 * maxValue / power_lim;
+    z = 4 * maxValue / power_lim; 
   } else {
     z = 1;
   }
@@ -691,6 +748,23 @@ void move() {
   left_rear_motor.writeMicroseconds(1500 + speed_array[3][0]);
   right_rear_motor.writeMicroseconds(1500 - speed_array[2][0]);
   right_front_motor.writeMicroseconds(1500 - speed_array[1][0]);
+}
+
+void printMap(){
+while(1){
+  for(int i=0; i<10;i++){
+    SerialCom->println("------- LANE [] ------- START X : Y ------- END X : Y ------");
+    SerialCom->print(i,DEC);
+    SerialCom->print("  ");
+    SerialCom->print("10,");
+    //SerialCom->print(mapping[i][0],DEC)
+    SerialCom->print("  ");
+    SerialCom->print("190,");
+    //BluetoothSerial.println(mapping[i][1],DEC)
+
+  }
+}
+delay(2000);
 }
 
 
@@ -817,6 +891,6 @@ void serialOutput(int32_t Value1, int32_t Value2, float Value3) {
   }
   if (OUTPUTBLUETOOTHMONITOR) {
     bluetoothSerialOutputMonitor(Value1, Value2, Value3);
-    ;
+    
   }
 }
