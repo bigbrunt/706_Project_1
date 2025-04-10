@@ -124,7 +124,7 @@ void setup(void) {
   digitalWrite(TRIG_PIN, LOW);
 
   // Setup the Serial port and pointer, the pointer allows switching the debug info through the USB port(Serial) or Bluetooth port(Serial1) with ease.
-  SerialCom = &Serial;
+  SerialCom = &Serial1;
   SerialCom->begin(115200);
   SerialCom->println("SETUP");
 
@@ -155,8 +155,9 @@ void loop(void)  //main loop
   //       Serial.println(currentAngle);
   //     } while (1);
   //     stop();
- 
+  // Serial.println(HC_SR04_range());
   findCorner();
+ 
 
   double align_millis = millis();
   controlReset();
@@ -309,13 +310,13 @@ void findCorner() {
   right_rear_motor.writeMicroseconds(1500 - 0);
   right_front_motor.writeMicroseconds(1500 + 0);
   delay(100);
-    left_front_motor.writeMicroseconds(1500 + 100);
+  left_front_motor.writeMicroseconds(1500 + 100);
   left_rear_motor.writeMicroseconds(1500 - 100);
   right_rear_motor.writeMicroseconds(1500 - 0);
   right_front_motor.writeMicroseconds(1500 + 0);
   delay(100);
   stop();
-  currentAngle = -2;
+  currentAngle = 0;
   delay(300);
   
   // figuire out and go to closest wall on X axis
@@ -325,28 +326,28 @@ void findCorner() {
       State state = TOWALL;
       updateAngle();
       control(1, 1, 1, state);
-    } while (abs(error_x) > 1);
+    } while (abs(error_x) > 0.5);
     stop();
   } else if (dist90 < dist270 && turn_flag == 1) {
     do {
       State state = AWAYWALL;
       updateAngle();
       control(1, 1, 1, state);
-    } while (abs(error_x) > 1);
+    } while (abs(error_x) > 0.5);
     stop();
   } else if (dist90 < dist270 && turn_flag == 0) {
     do {
       State state = TOWALL;
       updateAngle();
       control(1, 1, 1, state);
-    } while (abs(error_x) > 1);
+    } while (abs(error_x) > 0.5);
     stop();
   } else {
     do {
       State state = AWAYWALL;
       updateAngle();
       control(1, 1, 1, state);
-    } while (abs(error_x) > 1);
+    } while (abs(error_x) > 0.5);
     stop();
   }
 
@@ -468,7 +469,7 @@ void plow(bool direction) {
 
   // move foward first
   if (direction) {
-    for (int i = 0; i < 10; i += 2) {
+    for (int i = 0; i < 20; i += 2) {
       
       current_lane = i;
 
@@ -484,7 +485,7 @@ void plow(bool direction) {
       //GET Y START DIST
       mapping[i][0] = HC_SR04_range();
 
-      currentAngle -= 1;
+      currentAngle += 0;
 
       controlReset();
       do {
@@ -497,35 +498,36 @@ void plow(bool direction) {
       mapping[i][1] = HC_SR04_range();
       //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
       //OUTPUT LANE NUMBER AND ^^^ DATA
+      if(i != 18){
+        current_lane = i + 1;
+      
+        controlReset();
+        accel_start_time = 3.5;
+        do {
+          State state = NEXTLANE;
+          updateAngle();
+          control(0, 1, 1, state);
+        } while (abs(error_y) > 1);
 
-      current_lane = i + 1;
-     
-      controlReset();
-      accel_start_time = 3.5;
-      do {
-        State state = NEXTLANE;
-        updateAngle();
-        control(0, 1, 1, state);
-      } while (abs(error_y) > 1);
+        //GET Y START DIST
+        mapping[i][0] = HC_SR04_range();
 
-      //GET Y START DIST
-      mapping[i][0] = HC_SR04_range();
+        currentAngle += 0;  //correct for drift
 
-      currentAngle -= 1;  //correct for drift
-
-      controlReset();
-      do {
-        State state = AWAYWALL;
-        updateAngle();
-        control(1, 1, 1, state);
-      } while (abs(error_x) > 1);
-      //GET Y END DIST
-      mapping[i][0] = HC_SR04_range();
+        controlReset();
+        do {
+          State state = AWAYWALL;
+          updateAngle();
+          control(1, 1, 1, state);
+        } while (abs(error_x) > 1);
+        //GET Y END DIST
+        mapping[i][0] = HC_SR04_range();
+    }
       //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
       //OUTPUT LANE NUMBER AND ^^^ DATA
     }
   } else {  //move back first
-    for (int i = 0; i < 10; i += 2) {
+    for (int i = 0; i < 20; i += 2) {
       current_lane = i;
 
       controlReset();
@@ -538,7 +540,7 @@ void plow(bool direction) {
       } while (abs(error_y) > 1);
 
       //GET Y START DIST
-      currentAngle -= 1;
+      currentAngle += 0;
 
       controlReset();
       do {
@@ -550,30 +552,31 @@ void plow(bool direction) {
       //GET Y END DIST
       //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
       //OUTPUT LANE NUMBER AND ^^^ DATA
+      if(i != 18){
+        current_lane = i + 1;
+      
+        controlReset();
+        accel_start_time = 3.5;
+        do {
+          State state = NEXTLANE;
+          updateAngle();
+          control(0, 1, 1, state);
+        } while (abs(error_y) > 1);
 
-      current_lane = i + 1;
-     
-      controlReset();
-      accel_start_time = 3.5;
-      do {
-        State state = NEXTLANE;
-        updateAngle();
-        control(0, 1, 1, state);
-      } while (abs(error_y) > 1);
+        //GET Y START DIST
 
-      //GET Y START DIST
+        currentAngle += 0;  //correct for drift
 
-      currentAngle -= 1;  //correct for drift
-
-      controlReset();
-      do {
-        State state = TOWALL;
-        updateAngle();
-        control(1, 1, 1, state);
-      } while (abs(error_x) > 1);
-      //GET Y END DIST
-      //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
-      //OUTPUT LANE NUMBER AND ^^^ DATA
+        controlReset();
+        do {
+          State state = TOWALL;
+          updateAngle();
+          control(1, 1, 1, state);
+        } while (abs(error_x) > 1);
+        //GET Y END DIST
+        //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
+        //OUTPUT LANE NUMBER AND ^^^ DATA
+      }
     }
   }
 }
