@@ -482,7 +482,7 @@ void plow(bool direction) {
       } while (abs(error_y) > 1);
 
       //GET Y START DIST
-      mapping[i][0] = HC_SR04_range();
+      mapping[current_lane][0] = HC_SR04_range();
 
       currentAngle -= 1;
 
@@ -494,7 +494,7 @@ void plow(bool direction) {
       } while (abs(error_x) > 1);
 
       //GET Y END DIST
-      mapping[i][1] = HC_SR04_range();
+      mapping[current_lane][1] = HC_SR04_range();
       //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
       //OUTPUT LANE NUMBER AND ^^^ DATA
 
@@ -509,7 +509,7 @@ void plow(bool direction) {
       } while (abs(error_y) > 1);
 
       //GET Y START DIST
-      mapping[i][0] = HC_SR04_range();
+      mapping[current_lane][0] = HC_SR04_range();
 
       currentAngle -= 1;  //correct for drift
 
@@ -520,7 +520,7 @@ void plow(bool direction) {
         control(1, 1, 1, state);
       } while (abs(error_x) > 1);
       //GET Y END DIST
-      mapping[i][0] = HC_SR04_range();
+      mapping[current_lane][1] = HC_SR04_range();
       //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
       //OUTPUT LANE NUMBER AND ^^^ DATA
     }
@@ -536,7 +536,7 @@ void plow(bool direction) {
         control(0, 1, 1, state);
 
       } while (abs(error_y) > 1);
-
+      mapping[current_lane][0] = HC_SR04_range();
       //GET Y START DIST
       currentAngle -= 1;
 
@@ -550,7 +550,7 @@ void plow(bool direction) {
       //GET Y END DIST
       //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
       //OUTPUT LANE NUMBER AND ^^^ DATA
-
+      mapping[current_lane][1] = HC_SR04_range();
       current_lane = i + 1;
      
       controlReset();
@@ -562,7 +562,7 @@ void plow(bool direction) {
       } while (abs(error_y) > 1);
 
       //GET Y START DIST
-
+      mapping[current_lane][0] = HC_SR04_range();
       currentAngle -= 1;  //correct for drift
 
       controlReset();
@@ -571,6 +571,7 @@ void plow(bool direction) {
         updateAngle();
         control(1, 1, 1, state);
       } while (abs(error_x) > 1);
+      mapping[current_lane][1] = HC_SR04_range();
       //GET Y END DIST
       //KNOWING MAX X IS 2000CM, INTERPOLATE NUM POINTS (LOOK AT SOFTWARE BOXES) BETWEEN YSTART AND Y END
       //OUTPUT LANE NUMBER AND ^^^ DATA
@@ -758,19 +759,21 @@ void move() {
 }
 
 void printMap(){
-while(1){
+
   for(int i=0; i<10;i++){
     SerialCom->println("------- LANE [] ------- START X : Y ------- END X : Y ------");
     SerialCom->print(i,DEC);
     SerialCom->print("  ");
-    SerialCom->print("10,");
+    SerialCom->print(mapping[i][0]);
+    SerialCom->print(", ");
     //SerialCom->print(mapping[i][0],DEC)
     SerialCom->print("  ");
-    SerialCom->print("190,");
+    SerialCom->print(mapping[i][1]);
+    SerialCom->print(", ");
     //BluetoothSerial.println(mapping[i][1],DEC)
 
   }
-}
+
 delay(2000);
 }
 
